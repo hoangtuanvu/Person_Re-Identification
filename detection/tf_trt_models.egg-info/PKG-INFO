@@ -1,0 +1,10 @@
+Metadata-Version: 1.0
+Name: tf-trt-models
+Version: 0.0
+Summary: TensorFlow models accelerated with NVIDIA TensorRT
+Home-page: https://github.com/NVIDIA-Jetson/tf_trt_models
+Author: UNKNOWN
+Author-email: UNKNOWN
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
