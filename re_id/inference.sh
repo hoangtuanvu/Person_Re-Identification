@@ -1,0 +1,1 @@
+python inference.py --query sample/query --gallery sample/gallery --height 256 --width 128 -a resnet50 --load-weights checkpoint/model.pth.tar-60

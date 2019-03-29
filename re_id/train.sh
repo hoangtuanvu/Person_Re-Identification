@@ -1,0 +1,1 @@
+python model.py -s market1501 -t market1501 -a resnet50 -j 4 --epochs 60 --log logs/market-1501/PCB/ --feature 256 --height 384 --width 128 --step-size 40 --data-dir datasets/Market-1501 --random-erase
