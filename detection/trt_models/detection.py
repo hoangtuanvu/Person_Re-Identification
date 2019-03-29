@@ -278,6 +278,10 @@ def obj_det_graph(obj_model, obj_model_dir, trt_graph_path):
             if 'NonMaxSuppression' in node.name:
                 node.device = '/device:CPU:0'
         input_names = ['image_tensor']
+
+        for node in trt_graph.node:
+            if INPUT_NAME == node.name:
+                node.attr['shape'].shape.dim[0].size = -1
     else:
         config_path, checkpoint_path = download_detection_model(obj_model, obj_model_dir)
         frozen_graph, input_names, output_names = build_detection_graph(
@@ -289,7 +293,7 @@ def obj_det_graph(obj_model, obj_model_dir, trt_graph_path):
             input_graph_def=frozen_graph,
             outputs=output_names,
             max_batch_size=1,
-            max_workspace_size_bytes=1 << 26,
+            max_workspace_size_bytes=1 << 25,
             precision_mode='FP16',
             minimum_segment_size=50)
 
@@ -297,7 +301,7 @@ def obj_det_graph(obj_model, obj_model_dir, trt_graph_path):
             f.write(trt_graph.SerializeToString())
 
     tf_config = tf.ConfigProto()
-    tf_config.gpu_options.allow_growth = True
+    tf_config.gpu_options.per_process_gpu_memory_fraction = 0.333
     tf_sess = tf.Session(config=tf_config)
 
     tf.import_graph_def(trt_graph, name='')
@@ -306,6 +310,7 @@ def obj_det_graph(obj_model, obj_model_dir, trt_graph_path):
     tf_boxes = tf_sess.graph.get_tensor_by_name('detection_boxes:0')
     tf_classes = tf_sess.graph.get_tensor_by_name('detection_classes:0')
     return tf_sess, tf_scores, tf_boxes, tf_classes, tf_input
+
 
 def read_label_map(path_to_labels):
     """Read from the label map file and return a class dictionary which
