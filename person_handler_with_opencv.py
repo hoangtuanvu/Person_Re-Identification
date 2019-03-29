@@ -17,7 +17,7 @@ MEASURE_MODEL_TIME = False
 
 class PersonHandler:
     def __init__(self, args, query_size=(128, 256)):
-        self.use_tracking = args.use_tracking
+        self.tracking_type = args.tracking_type
         self.query_size = query_size
         self.matching_threshold = args.matching_threshold
         self.conf_th = args.conf_th
@@ -34,6 +34,9 @@ class PersonHandler:
             ToTensor(),
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
+
+        self.line = [(43, 543), (550, 655)]
+        self.memory = {}
 
         if len(args.model) == 0:
             raise ValueError('Detection model weight does not exist!')
@@ -143,7 +146,9 @@ class PersonHandler:
             # Add overlay, show image, update fps buffer, and exit
             cv2.addWeighted(overlay, 0.22, output, 0.78, 0, output)
 
-            output = vis.draw_bboxes(output, box, conf, cls)
+            if not self.tracking_type:
+                output = vis.draw_bboxes(output, box, conf, cls)
+
             if show_fps:
                 output = draw_help_and_fps(output, fps)
             cv2.imshow(WINDOW_NAME, output)
@@ -187,13 +192,63 @@ class PersonHandler:
             [self.boxes, self.scores, self.classes],
             feed_dict={self.input: img[None, ...]})
 
-        box, conf, cls = person_filtering(origimg, boxes_out, scores_out, classes_out, self.conf_th)
+        _box, _conf, cls = person_filtering(origimg, boxes_out, scores_out, classes_out, self.conf_th)
 
-        if len(box) == 0:
+        if len(_box) == 0:
             return [], [], []
 
-        if self.use_tracking:
-            boxs = convert_boxes(box)
+        if self.tracking_type == 'sort':
+            box = [tmp_box.tolist() for tmp_box in _box]
+            conf = [tmp_conf.tolist() for tmp_conf in _conf]
+
+            # apply non-maxima suppression to suppress weak, overlapping
+            # bounding boxes
+            idxs = cv2.dnn.NMSBoxes(box, conf, self.conf_th, 0.3)
+            dets = []
+            if len(idxs) > 0:
+                # loop over the indexes we are keeping
+                for i in idxs.flatten():
+                    (x, y) = (box[i][1], box[i][0])
+                    (w, h) = (box[i][3] - box[i][1], box[i][2] - box[i][0])
+                    dets.append([x, y, x + w, y + h, conf[i]])
+
+            np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
+            dets = np.asarray(dets)
+            tracks = tracker.update(dets)
+
+            boxes = []
+            indexIDs = []
+            previous = self.memory.copy()
+            self.memory = {}
+
+            for track in tracks:
+                boxes.append([track[0], track[1], track[2], track[3]])
+                indexIDs.append(int(track[4]))
+                self.memory[indexIDs[-1]] = boxes[-1]
+
+            if len(boxes) > 0:
+                i = int(0)
+                for box in boxes:
+                    # extract the bounding box coordinates
+                    (x, y) = (int(box[0]), int(box[1]))
+                    (w, h) = (int(box[2]), int(box[3]))
+
+                    # draw a bounding box rectangle and label on the image
+                    color = [int(c) for c in self.COLORS[indexIDs[i] % len(self.COLORS)]]
+                    cv2.rectangle(origimg, (x, y), (w, h), color, 2)
+
+                    if indexIDs[i] in previous:
+                        previous_box = previous[indexIDs[i]]
+                        (x2, y2) = (int(previous_box[0]), int(previous_box[1]))
+                        (w2, h2) = (int(previous_box[2]), int(previous_box[3]))
+                        p0 = (int(x + (w - x) / 2), int(y + (h - y) / 2))
+                        p1 = (int(x2 + (w2 - x2) / 2), int(y2 + (h2 - y2) / 2))
+                        cv2.line(origimg, p0, p1, color, 3)
+                    text = "{}".format(indexIDs[i])
+                    cv2.putText(origimg, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    i += 1
+        elif self.tracking_type == "deep_sort":
+            boxs = convert_boxes(_box)
             features = encoder(origimg, boxs)
             detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(boxs, features)]
             boxes = np.array([d.tlwh for d in detections])

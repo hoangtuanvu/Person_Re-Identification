@@ -68,9 +68,9 @@ def parse_args():
     parser.add_argument('--tracker-path', dest='tracker_weights',
                         help='[{}]'.format('tracking/model_data/mars-small128.pb'),
                         default='tracking/model_data/mars-small128.pb', type=str)
-    parser.add_argument('--tracking', dest='use_tracking',
-                        help='use or not use tracking',
-                        action='store_true')
+    parser.add_argument('--tracking-type', dest='tracking_type',
+                        help='use sort or deep sort for tracking person',
+                        default='', type=str)
     parser.add_argument('--max-cosine-distance', dest='max_cosine_distance',
                         help='maximun cosine distance [0.3]',
                         default=0.3, type=float)

@@ -4,6 +4,7 @@ import cv2
 import re
 from tracking.deep_sort import nn_matching
 from tracking.deep_sort.tracker import Tracker
+from tracking.sort.sort import *
 from tracking.tools import generate_detections as gdet
 from detection.trt_models.detection import read_label_map
 from detection.utils.visualization import BBoxVisualization
@@ -72,9 +73,15 @@ print('Load Input Arguments')
 args = parse_args()
 
 print('Load Tracker ...')
-encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)
-metric = nn_matching.NearestNeighborDistanceMetric("cosine", args.max_cosine_distance)
-tracker = Tracker(metric)
+tracker = None
+encoder = None
+
+if args.tracking_type == "sort":
+    tracker = Sort()
+elif args.tracking_type == "deep_sort":
+    encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)
+    metric = nn_matching.NearestNeighborDistanceMetric("cosine", args.max_cosine_distance)
+    tracker = Tracker(metric)
 
 print('Load Object Detection model ...')
 person_handler = PersonHandler(args)
