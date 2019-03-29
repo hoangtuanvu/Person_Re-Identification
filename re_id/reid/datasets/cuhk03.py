@@ -8,8 +8,7 @@ import h5py
 from scipy.misc import imsave
 
 import sys
-sys.path.append('..')
-from reid.utils.data.iotools import mkdir_if_missing, write_json, read_json
+from re_id.reid.utils.data.iotools import mkdir_if_missing, write_json, read_json
 from .bases import BaseImageDataset
 
 
