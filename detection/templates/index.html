@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block body %}
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+<ul class="flash">
+    {% for message in messages %}
+    <li>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endwith %}
+
+<p>Upload Video for Detecting/Tracking</p>
+
+<form action="/" method="post" enctype="multipart/form-data">
+    <input type="file" multiple="" name="files" id="files">
+    <input type="submit" value="Submit">
+</form>
+
+
+<html>
+  <body>
+    <h1>Video Streaming Demonstration</h1>
+  </body>
+</html>
+{% endblock %}

@@ -53,6 +53,7 @@ def draw_boxed_text(img, text, topleft, color):
     # Output
       img: note the original image is modified inplace.
     """
+
     assert img.dtype == np.uint8
     img_h, img_w, _ = img.shape
     if topleft[0] >= img_w or topleft[1] >= img_h:
@@ -75,7 +76,7 @@ def draw_boxed_text(img, text, topleft, color):
     return img
 
 
-class BBoxVisualization():
+class BBoxVisualization:
     """BBoxVisualization class implements nice drawing of boudning boxes.
 
     # Arguments
@@ -96,5 +97,5 @@ class BBoxVisualization():
             txt_loc = (max(x_min + 2, 0), max(y_min + 2, 0))
             cls_name = self.cls_dict.get(cl, 'CLS{}'.format(cl))
             txt = '{} {:.2f}'.format(cls_name, cf)
-            img = draw_boxed_text(img, txt, txt_loc, color)
+            draw_boxed_text(img, txt, txt_loc, color)
         return img
