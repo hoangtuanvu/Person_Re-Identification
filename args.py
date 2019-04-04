@@ -47,21 +47,25 @@ def parse_args():
     # ******************************************************************************************************************
     # Detection
     # ******************************************************************************************************************
-    parser.add_argument('--model', dest='model',
-                        help='tf-trt object detection model '
-                             '[{}]'.format('faster_rcnn_inception_v2'),
-                        default='faster_rcnn_inception_v2', type=str)
     parser.add_argument('--confidence', dest='conf_th',
-                        help='confidence threshold [0.3]',
+                        help='object confidence threshold',
+                        default=0.2, type=float)
+    parser.add_argument('--nms-thres', dest='nms_thres',
+                        help='iou threshold for non-maximum suppression',
                         default=0.3, type=float)
-    parser.add_argument('--labelmap', dest='labelmap_file',
-                        help='[{}]'.format('detection/third_party/models/research/object_detection/'
-                                           'data/mscoco_label_map.pbtxt'),
-                        default='detection/third_party/models/research/object_detection/'
-                                'data/mscoco_label_map.pbtxt', type=str)
-    parser.add_argument('--detection-path', dest='detection_weights',
+    parser.add_argument('--config-path', dest='config_path',
+                        default='detection/config/yolov3.cfg', type=str)
+    parser.add_argument('--detection-weight', dest='detection_weight',
                         help='Person detection model',
-                        default='data/ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb', type=str)
+                        default='detection/weights/yolov3.weights', type=str)
+    parser.add_argument('--data-path', dest='data_path',
+                        default='detection/data/coco.names', type=str)
+    parser.add_argument('--img-size', dest='img_size',
+                        type=int, default=416, help='size of each image dimension')
+    parser.add_argument('--use-cpu', dest='use_cpu',
+                        action='store_true', help='force model use cpu for inference')
+    parser.add_argument('--images', dest='images',
+                        type=str, default='data/samples', help='path to images')
     # ******************************************************************************************************************
     # Tracking
     # ******************************************************************************************************************
@@ -77,15 +81,14 @@ def parse_args():
     # ******************************************************************************************************************
     # Re-Identification
     # ******************************************************************************************************************
-    parser.add_argument('--use-cpu', action='store_true', help='use cpu')
     parser.add_argument('-a', '--arch', type=str, default='resnet50')
-    parser.add_argument('--load-weights', type=str,
-                        default='/mnt/sda3/PersonREID/checkpoint/reid/market_duke_cuhk03_full_not_pretrained/checkpoint.pth.tar',
+    parser.add_argument('--reid-weights', type=str,
+                        default='re_id/logs_best/market-1501/PCB/checkpoint.pth.tar',
                         help='load pretrained weights but ignore layers that don\'t match in size')
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--matching-threshold', dest='matching_threshold',
                         help='distance threshold between query image and gallery',
-                        default=7.0, type=float)
+                        default=3.7, type=float)
     parser.add_argument('--num-classes', dest='num_classes', default=751,
                         help='(deprecated and not used) number of object classes', type=int)
     args = parser.parse_args()

@@ -13,5 +13,5 @@ pip3 install -r requirements.txt
 
 2. Run application with video model
 ```
-python app.py --load-weights [path/to/person_reid_weights] --detection-path [path/to/detection_weights] --num-classes [number_classes_of_person_reid] --matching-threshold 3.7
+python app.py --reid-weights [path/to/person_reid_weights] --detection-weight [path/to/detection_weights] --num-classes [number_classes_of_person_reid]
 ```

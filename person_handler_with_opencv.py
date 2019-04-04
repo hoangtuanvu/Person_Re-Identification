@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection
 from detection.trt_models.detection import obj_det_graph
-from utils import *
+from utilities import *
 
 WINDOW_NAME = 'PersonReID_Demo'
 MEASURE_MODEL_TIME = False

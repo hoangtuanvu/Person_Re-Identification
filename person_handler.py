@@ -1,27 +1,43 @@
-from utils import *
-from detection.trt_models.detection import obj_det_graph
 import cv2
 import time
 import numpy as np
 import torch
 import torch.nn as nn
-from re_id.reid import models
-from re_id.reid.utils.serialization import load_checkpoint
+from utilities import inference
+from utilities import matching
+from utilities import draw_help_and_fps
+from torch.backends import cudnn
 from torch.utils.data import DataLoader
-from torchvision.transforms import *
-from re_id.reid.dataset_loader import RawDatasetImages
+from torchvision.transforms import Resize
+from torchvision.transforms import Compose
+from torchvision.transforms import ToTensor
+from torchvision.transforms import Normalize
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection
+from detection.model.yolov3 import Darknet
+from detection.utils.commons import boxes_filtering
+from detection.utils.commons import non_max_suppression
+from re_id.reid import models
+from re_id.reid.dataset_loader import RawDatasetImages
+from re_id.reid.utils.serialization import load_checkpoint
 
 MEASURE_MODEL_TIME = False
 
 
 class PersonHandler:
     def __init__(self, args):
+        # Tracking Variables
         self.tracking_type = args.tracking_type
         self.matching_threshold = args.matching_threshold
-        self.img_boxes = []
+        self.memory = {}
+
+        # Detection Variables
         self.conf_th = args.conf_th
+        self.nms_thres = args.nms_thres
+        self.img_size = args.img_size
+
+        # Re-ID Variables
+        self.img_boxes = []
         self.query_embedding = None
         self.embeddings = None
         self.COLORS = [(255, 0, 0), (0, 255, 0), (0, 0, 255), (0, 150, 255),
@@ -34,31 +50,36 @@ class PersonHandler:
             Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
 
-        self.line = [(43, 543), (550, 655)]
-        self.memory = {}
-
-        if len(args.model) == 0:
+        if len(args.config_path) == 0 or len(args.detection_weight) == 0:
             raise ValueError('Detection model weight does not exist!')
 
-        if len(args.load_weights) == 0:
+        if len(args.reid_weights) == 0:
             raise ValueError('Person ReID model weight does not exist!')
 
-        # Load model Detection
-        self.sess, self.scores, self.boxes, self.classes, self.input = obj_det_graph(args.model, 'data',
-                                                                                     args.detection_weights)
-
-        # Load model Person Re-identification
         self.use_gpu = torch.cuda.is_available()
         if args.use_cpu:
             self.use_gpu = False
 
-        print('Initializing model: {}'.format(args.arch))
+        self.Tensor = torch.cuda.FloatTensor if self.use_gpu else torch.FloatTensor
+        self.device = torch.device('cuda' if self.use_gpu else 'cpu')
+
+        # Load model Detection
+        print('Loading detection model ...')
+        detect_model = Darknet(args.config_path, img_size=self.img_size, device=self.device)
+        detect_model.load_darknet_weights(args.detection_weight)
+
+        self.detect_model = nn.DataParallel(detect_model).cuda() if self.use_gpu else detect_model
+        self.detect_model.eval()
+        cudnn.benchmark = True
+
+        # Load model Person Re-identification
+        print('Loading Re-ID model')
         reid_model = models.create(args.arch, num_features=256,
                                    dropout=args.dropout, num_classes=args.num_classes, cut_at_pooling=False, FCN=True)
-        load_checkpoint(reid_model, args.load_weights)
+        load_checkpoint(reid_model, args.reid_weights)
         self.reid_model = nn.DataParallel(reid_model).cuda() if self.use_gpu else reid_model
 
-    def loop_and_detect(self, cam, vis, od_type, tracker, encoder, img_query):
+    def loop_and_detect(self, loader, vis, tracker, encoder, img_query):
         """Loop, grab images from camera, and do object detection.
 
         # Arguments
@@ -70,18 +91,10 @@ class PersonHandler:
         show_fps = True
         fps = 0.0
         tic = time.time()
-        while True:
-
-            ret, img = cam.read()
-
-            if not ret:
-                break
-
-            display = np.array(img)
+        for i, (img, img0) in enumerate(loader):
+            display = np.array(img0)
             output = display.copy()
-
-            # Run Object Detection and Tracking
-            box, conf, cls = self.detect(output, encoder, tracker, od_type=od_type)
+            box, conf, cls = self.detect(output, img, encoder, tracker)
 
             if len(img_query) > 0 and len(box) > 0:
                 overlay = display.copy()
@@ -95,7 +108,7 @@ class PersonHandler:
                 persons = []
                 for i in range(len(box)):
                     self.img_boxes.append(box[i])
-                    person_slice = img[box[i][0]:box[i][2], box[i][1]:box[i][3], :]
+                    person_slice = img0[box[i][0]:box[i][2], box[i][1]:box[i][3], :]
                     persons += [person_slice]
 
                 query_loader = DataLoader(
@@ -133,10 +146,12 @@ class PersonHandler:
             if show_fps:
                 output = draw_help_and_fps(output, fps, True)
 
+            start_time = time.time()
             cv2.imwrite('demo.jpg', output)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + open('demo.jpg', 'rb').read() + b'\r\n')
 
+            print('Time to write image', time.time() - start_time)
             # Calculate FPS
             toc = time.time()
             curr_fps = 1.0 / (toc - tic)
@@ -144,46 +159,44 @@ class PersonHandler:
             fps = curr_fps if fps == 0.0 else (fps * 0.9 + curr_fps * 0.1)
             tic = toc
 
-    def detect(self, origimg, encoder, tracker, od_type='ssd'):
+    def detect(self, origimg, img, encoder, tracker):
         """Do object detection over 1 image."""
         global avg_time
-
-        if od_type == 'faster_rcnn':
-            img = resize(origimg, (1024, 576))
-        elif od_type == 'ssd':
-            img = resize(origimg, (300, 300))
-        else:
-            raise ValueError('bad object detector type: $s' % od_type)
 
         if MEASURE_MODEL_TIME:
             tic = time.time()
 
-        start_time = time.time()
-        boxes_out, scores_out, classes_out = self.sess.run(
-            [self.boxes, self.scores, self.classes],
-            feed_dict={self.input: img[None, ...]})
-        print('Processed time: {}'.format(time.time() - start_time))
-        _box, _conf, cls = person_filtering(origimg, boxes_out, scores_out, classes_out, self.conf_th)
+        input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
+
+        # Get detections
+        with torch.no_grad():
+            start_time = time.time()
+            detections = self.detect_model(input_imgs)
+            detections = non_max_suppression(detections, self.conf_th, self.nms_thres)[0]
+            print('Time to predict', time.time() - start_time)
+
+        if detections is None:
+            return [], [], []
+
+        _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size)
+
+        vis_box = []
+        for i in range(len(_box)):
+            x1 = _box[i][0] if _box[i][0] >= 0 else 0
+            y1 = _box[i][1] if _box[i][1] >= 0 else 0
+            w = _box[i][2]
+            h = _box[i][3]
+            vis_box.append([y1, x1, y1 + h, x1 + w])
 
         if len(_box) == 0:
             return [], [], []
 
         if self.tracking_type == 'sort':
-            box = [tmp_box.tolist() for tmp_box in _box]
-            conf = [tmp_conf.tolist() for tmp_conf in _conf]
-
-            # apply non-maxima suppression to suppress weak, overlapping
-            # bounding boxes
-            idxs = cv2.dnn.NMSBoxes(box, conf, self.conf_th, 0.3)
             dets = []
-            if len(idxs) > 0:
-                # loop over the indexes we are keeping
-                for i in idxs.flatten():
-                    (x, y) = (box[i][1], box[i][0])
-                    (w, h) = (box[i][3] - box[i][1], box[i][2] - box[i][0])
-                    dets.append([x, y, x + w, y + h, conf[i]])
+            for i in range(len(_box)):
+                x, y, w, h = _box[i]
+                dets.append([x, y, x + w, y + h, _conf[i]])
 
-            np.set_printoptions(formatter={'float': lambda x: "{0:0.3f}".format(x)})
             dets = np.asarray(dets)
             tracks = tracker.update(dets)
 
@@ -219,9 +232,8 @@ class PersonHandler:
                     cv2.putText(origimg, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                     i += 1
         elif self.tracking_type == "deep_sort":
-            boxs = convert_boxes(_box)
-            features = encoder(origimg, boxs)
-            detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(boxs, features)]
+            features = encoder(origimg, _box)
+            detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(_box, features)]
             boxes = np.array([d.tlwh for d in detections])
             scores = np.array([d.confidence for d in detections])
             indices = preprocessing.non_max_suppression(boxes, 1.0, scores)
@@ -241,4 +253,4 @@ class PersonHandler:
             avg_time = avg_time * 0.9 + td * 0.1
             print('tf_sess.run() took {:.1f} ms on average'.format(avg_time))
 
-        return _box, _conf, cls
+        return vis_box, _conf, cls

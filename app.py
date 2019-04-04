@@ -1,12 +1,13 @@
 from flask import Flask, render_template, Response, request, flash, redirect
 import os
-import cv2
 import re
+from tracking.sort.sort import Sort
 from tracking.deep_sort import nn_matching
 from tracking.deep_sort.tracker import Tracker
-from tracking.sort.sort import *
 from tracking.tools import generate_detections as gdet
-from detection.trt_models.detection import read_label_map
+from detection.utils.datasets import LoadCamera
+from detection.utils.commons import load_cls_dict
+from detection.utils.parse_config import parse_data_config
 from detection.utils.visualization import BBoxVisualization
 from person_handler import PersonHandler
 from args import parse_args
@@ -87,9 +88,7 @@ print('Load Object Detection model ...')
 person_handler = PersonHandler(args)
 
 print('Load Label Map')
-cls_dict = read_label_map(args.labelmap_file)
-
-od_type = 'faster_rcnn' if 'faster_rcnn' in args.model else 'ssd'
+cls_dict = load_cls_dict(args.data_path)
 
 # grab image and do object detection (until stopped by user)
 print('starting to loop and detect')
@@ -98,15 +97,16 @@ vis = BBoxVisualization(cls_dict)
 
 @app.route('/person_reid', methods=['GET'])
 def person_reid():
-    return Response(person_handler.loop_and_detect(cap, vis, od_type, tracker, encoder, file_path),
+    return Response(person_handler.loop_and_detect(loader, vis, tracker, encoder, file_path),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/video_feed', methods=['GET'])
 def video_feed():
-    global cap
-    cap = cv2.VideoCapture(file_path[0])
-    return Response(person_handler.loop_and_detect(cap, vis, od_type, tracker, encoder, ''),
+    global loader
+    loader = LoadCamera(file_path[0], args.img_size)
+
+    return Response(person_handler.loop_and_detect(loader, vis, tracker, encoder, ''),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
