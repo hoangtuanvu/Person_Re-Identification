@@ -17,13 +17,11 @@
 """
 from __future__ import print_function
 
-from numba import jit
 import numpy as np
 from sklearn.utils.linear_assignment_ import linear_assignment
 from filterpy.kalman import KalmanFilter
 
 
-@jit
 def iou(bb_test, bb_gt):
     """
     Computes IUO between two bboxes in the form [x1,y1,x2,y2]
