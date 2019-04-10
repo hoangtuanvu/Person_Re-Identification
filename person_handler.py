@@ -3,23 +3,17 @@ import time
 import numpy as np
 import torch
 import torch.nn as nn
-from utilities import inference
 from utilities import matching
 from utilities import draw_help_and_fps
 from torch.backends import cudnn
-from torch.utils.data import DataLoader
-from torchvision.transforms import Resize
-from torchvision.transforms import Compose
-from torchvision.transforms import ToTensor
-from torchvision.transforms import Normalize
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection
 from detection.model.yolov3 import Darknet
 from detection.utils.commons import boxes_filtering
 from detection.utils.commons import non_max_suppression
 from re_id.reid import models
-from re_id.reid.dataset_loader import RawDatasetImages
 from re_id.reid.utils.serialization import load_checkpoint
+from re_id.reid.feature_extraction.cnn import extract_cnn_feature
 
 MEASURE_MODEL_TIME = False
 
@@ -44,11 +38,6 @@ class PersonHandler:
                        (0, 255, 255), (200, 0, 200), (255, 191, 0), (180, 105, 255)]
         self.query = []
         self.query_paths = []
-        self.transform = Compose([
-            Resize((384, 128)),
-            ToTensor(),
-            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
 
         if len(args.config_path) == 0 or len(args.detection_weight) == 0:
             raise ValueError('Detection model weight does not exist!')
@@ -62,6 +51,7 @@ class PersonHandler:
 
         self.Tensor = torch.cuda.FloatTensor if self.use_gpu else torch.FloatTensor
         self.device = torch.device('cuda' if self.use_gpu else 'cpu')
+        self.use_resize = args.use_resize
 
         # Load model Detection
         print('Loading detection model ...')
@@ -74,8 +64,13 @@ class PersonHandler:
 
         # Load model Person Re-identification
         print('Loading Re-ID model')
-        reid_model = models.create(args.arch, num_features=256,
-                                   dropout=args.dropout, num_classes=args.num_classes, cut_at_pooling=False, FCN=True)
+        if args.arch.startswith('resnet'):
+            reid_model = models.create(args.arch, num_features=256,
+                                       dropout=args.dropout, num_classes=args.num_classes, cut_at_pooling=False,
+                                       FCN=True)
+        else:
+            reid_model = models.create(args.arch, num_classes=args.num_classes, use_gpu=self.use_gpu)
+
         load_checkpoint(reid_model, args.reid_weights)
         self.reid_model = nn.DataParallel(reid_model).cuda() if self.use_gpu else reid_model
 
@@ -111,18 +106,11 @@ class PersonHandler:
                     person_slice = img0[box[i][0]:box[i][2], box[i][1]:box[i][3], :]
                     persons += [person_slice]
 
-                query_loader = DataLoader(
-                    RawDatasetImages(self.query, transform=self.transform),
-                    batch_size=1, shuffle=False,
-                    pin_memory=self.use_gpu, drop_last=False)
+                query_imgs = self.img_transform(self.query, (128, 384))
+                gallery_imgs = self.img_transform(persons, (128, 384))
 
-                gallery_loader = DataLoader(
-                    RawDatasetImages(persons, transform=self.transform),
-                    batch_size=1, shuffle=False,
-                    pin_memory=self.use_gpu, drop_last=False)
-
-                self.embeddings = inference(gallery_loader, self.reid_model, self.use_gpu)
-                self.query_embedding = inference(query_loader, self.reid_model, self.use_gpu)
+                self.embeddings = self.extract_embeddings(gallery_imgs)
+                self.query_embedding = self.extract_embeddings(query_imgs)
 
                 # run matching algorithm
                 bb_idx = matching(self.query_embedding, self.embeddings, self.matching_threshold)
@@ -145,6 +133,9 @@ class PersonHandler:
 
             if show_fps:
                 output = draw_help_and_fps(output, fps, True)
+
+            if self.use_resize:
+                output = cv2.resize(output, (640, 480), interpolation=cv2.INTER_LINEAR)
 
             start_time = time.time()
             cv2.imwrite('demo.jpg', output)
@@ -170,10 +161,8 @@ class PersonHandler:
 
         # Get detections
         with torch.no_grad():
-            start_time = time.time()
             detections = self.detect_model(input_imgs)
             detections = non_max_suppression(detections, self.conf_th, self.nms_thres)[0]
-            print('Time to predict', time.time() - start_time)
 
         if detections is None:
             return [], [], []
@@ -254,3 +243,39 @@ class PersonHandler:
             print('tf_sess.run() took {:.1f} ms on average'.format(avg_time))
 
         return vis_box, _conf, cls
+
+    def extract_embeddings(self, inputs):
+        return list(extract_cnn_feature(self.reid_model, inputs))
+
+    def img_transform(self, imgs, new_shape):
+        aug_imgs = []
+        for img in imgs:
+            img = cv2.resize(img, new_shape, interpolation=cv2.INTER_LINEAR)
+            img = img.transpose(2, 0, 1)
+            img = np.ascontiguousarray(img, dtype=np.float32)
+            img /= 255.0
+            img = self.normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            aug_imgs.append(img)
+
+        _ = torch.from_numpy(np.stack(aug_imgs)).float().to(self.device)
+
+        return _
+
+    @staticmethod
+    def normalize(img, mean=None, std=None):
+        if mean is None or std is None:
+            return img
+
+        assert len(mean) == 3 and len(std) == 3
+
+        def sub(x, value):
+            return x - value
+
+        def div(x, value):
+            return x / value
+
+        c0 = div(sub(img[0], mean[0]), std[0])
+        c1 = div(sub(img[1], mean[1]), std[1])
+        c2 = div(sub(img[2], mean[2]), std[2])
+        img = np.stack([c0, c1, c2], axis=0)
+        return img

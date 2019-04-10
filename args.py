@@ -44,6 +44,8 @@ def parse_args():
     parser.add_argument('--height', dest='image_height',
                         help='image height [720]',
                         default=720, type=int)
+    parser.add_argument('--use-resize', dest='use_resize',
+                        action='store_true', help='resize output image for improving FPS')
     # ******************************************************************************************************************
     # Detection
     # ******************************************************************************************************************

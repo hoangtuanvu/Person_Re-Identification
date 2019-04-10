@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import torch
-from re_id.reid.feature_extraction import extract_cnn_feature
 
 
 def matching(qf, gf, threshold=3.0):
@@ -50,8 +49,8 @@ def draw_help_and_fps(img, fps, only_fps=False):
 
     fps_text = 'FPS: {:.1f}'.format(fps)
 
-    cv2.putText(img, fps_text, (11, 50), font, 1.0, (32, 32, 32), 4, line)
-    cv2.putText(img, fps_text, (10, 50), font, 1.0, (240, 240, 240), 1, line)
+    cv2.putText(img, fps_text, (11, 50), font, 2.0, (32, 32, 32), 4, line)
+    cv2.putText(img, fps_text, (10, 50), font, 2.0, (240, 240, 240), 1, line)
 
     if not only_fps:
         cv2.putText(img, help_text, (11, 20), font, 1.0, (32, 32, 32), 4, line)
@@ -110,31 +109,3 @@ def person_filtering(img, boxes, scores, classes, conf_th):
             _out_cls.append(out_cls[i])
 
     return _out_box, _out_conf, _out_cls
-
-
-def inference(loader, model, use_gpu):
-    with torch.no_grad():
-        embedding = []
-
-        dataloader_iterator = iter(loader)
-        for i in range(len(loader)):
-            try:
-                imgs = next(dataloader_iterator)
-            except StopIteration:
-                dataloader_iterator = iter(loader)
-                imgs = next(dataloader_iterator)
-
-            if use_gpu:
-                imgs = imgs.cuda()
-
-            features = extract_cnn_feature(model, imgs)
-            embedding.extend(list(features))
-    return embedding
-
-
-def intersect(A, B, C, D):
-    return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
-
-
-def ccw(A, B, C):
-    return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
