@@ -13,9 +13,10 @@ from reid import models
 from reid.trainers_partloss import Trainer
 from reid.evaluators import Evaluator
 from reid.utils.logging import Logger
-from reid.utils.serialization import load_checkpoint, save_checkpoint
+from reid.utils.serialization import save_checkpoint
 from reid.data_manager import ImageDataManager
 from reid.utils.data.reidtools import visualize_ranked_results
+from reid.utils.data.torchtools import load_checkpoint
 
 
 def image_dataset_kwargs(parsed_args):

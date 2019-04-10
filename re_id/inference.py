@@ -107,15 +107,7 @@ def main(args):
     # Load from checkpoint
     print('Loading model ...')
     if args.load_weights and check_isfile(args.load_weights):
-        checkpoint = load_checkpoint(args.load_weights)
-        model_dict = model.state_dict()
-        checkpoint_load = {k: v for k, v in (checkpoint['state_dict']).items() if k in model_dict}
-        model_dict.update(checkpoint_load)
-        model.load_state_dict(model_dict)
-        start_epoch = checkpoint['epoch']
-        best_top1 = checkpoint['best_top1']
-        print("=> Start epoch {}  best top1 {:.1%}"
-              .format(start_epoch, best_top1))
+        load_checkpoint(model, args.load_weights)
 
     model = nn.DataParallel(model).cuda() if use_gpu else model
 
