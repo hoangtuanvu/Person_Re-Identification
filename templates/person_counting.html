@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block body %}
+
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+<ul class="flash">
+    {% for message in messages %}
+    <li>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% endwith %}
+
+<html>
+  <body>
+    <h1>Video Streaming Demonstration</h1>
+        <img src="{{ url_for('video_feed') }}">
+  </body>
+</html>
+{% endblock %}
