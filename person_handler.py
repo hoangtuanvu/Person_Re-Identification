@@ -4,12 +4,14 @@ import numpy as np
 import torch
 import torch.nn as nn
 from utilities import matching
+from utilities import img_transform
 from utilities import draw_help_and_fps
+from utilities import boxes_filtering
+from utilities import visualize_box
 from torch.backends import cudnn
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection
 from detection.model.yolov3 import Darknet
-from detection.utils.commons import boxes_filtering
 from detection.utils.commons import non_max_suppression
 from re_id.reid import models
 from re_id.reid.utils.serialization import load_checkpoint
@@ -52,6 +54,7 @@ class PersonHandler:
         self.Tensor = torch.cuda.FloatTensor if self.use_gpu else torch.FloatTensor
         self.device = torch.device('cuda' if self.use_gpu else 'cpu')
         self.use_resize = args.use_resize
+        self.show_fps = args.show_fps
 
         # Load model Detection
         print('Loading detection model ...')
@@ -83,13 +86,12 @@ class PersonHandler:
           conf_th: confidence/score threshold for object detection.
           vis: for visualization.
         """
-        show_fps = True
         fps = 0.0
         tic = time.time()
         for i, (img, img0) in enumerate(loader):
             display = np.array(img0)
             output = display.copy()
-            box, conf, cls = self.detect(output, img, encoder, tracker)
+            box, conf, cls = self.detect_n_track(output, img, encoder, tracker)
 
             if len(img_query) > 0 and len(box) > 0:
                 overlay = display.copy()
@@ -106,14 +108,15 @@ class PersonHandler:
                     person_slice = img0[box[i][0]:box[i][2], box[i][1]:box[i][3], :]
                     persons += [person_slice]
 
-                query_imgs = self.img_transform(self.query, (128, 384))
-                gallery_imgs = self.img_transform(persons, (128, 384))
+                query_imgs = img_transform(self.query, (128, 384))
+                gallery_imgs = img_transform(persons, (128, 384))
 
                 self.embeddings = self.extract_embeddings(gallery_imgs)
                 self.query_embedding = self.extract_embeddings(query_imgs)
 
                 # run matching algorithm
                 bb_idx = matching(self.query_embedding, self.embeddings, self.matching_threshold)
+                bb_idx = [idx[1] for idx in bb_idx]
 
                 # Draw relevant info on bounding boxes
                 for i, bbox in enumerate(self.img_boxes):
@@ -131,8 +134,8 @@ class PersonHandler:
             if not self.tracking_type:
                 output = vis.draw_bboxes(output, box, conf, cls)
 
-            if show_fps:
-                output = draw_help_and_fps(output, fps, True)
+            if self.show_fps:
+                draw_help_and_fps(output, fps, True)
 
             if self.use_resize:
                 output = cv2.resize(output, (640, 480), interpolation=cv2.INTER_LINEAR)
@@ -150,7 +153,7 @@ class PersonHandler:
             fps = curr_fps if fps == 0.0 else (fps * 0.9 + curr_fps * 0.1)
             tic = toc
 
-    def detect(self, origimg, img, encoder, tracker):
+    def detect_n_track(self, origimg, img, encoder, tracker):
         """Do object detection over 1 image."""
         global avg_time
 
@@ -159,7 +162,7 @@ class PersonHandler:
 
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
 
-        # Get detections
+        # Applies yolov3 detection
         with torch.no_grad():
             detections = self.detect_model(input_imgs)
             detections = non_max_suppression(detections, self.conf_th, self.nms_thres)[0]
@@ -169,17 +172,12 @@ class PersonHandler:
 
         _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size)
 
-        vis_box = []
-        for i in range(len(_box)):
-            x1 = _box[i][0] if _box[i][0] >= 0 else 0
-            y1 = _box[i][1] if _box[i][1] >= 0 else 0
-            w = _box[i][2]
-            h = _box[i][3]
-            vis_box.append([y1, x1, y1 + h, x1 + w])
+        vis_box = visualize_box(_box)
 
         if len(_box) == 0:
             return [], [], []
 
+        # Applies deep_sort/sort for tracking people
         if self.tracking_type == 'sort':
             dets = []
             for i in range(len(_box)):
@@ -246,36 +244,3 @@ class PersonHandler:
 
     def extract_embeddings(self, inputs):
         return list(extract_cnn_feature(self.reid_model, inputs))
-
-    def img_transform(self, imgs, new_shape):
-        aug_imgs = []
-        for img in imgs:
-            img = cv2.resize(img, new_shape, interpolation=cv2.INTER_LINEAR)
-            img = img.transpose(2, 0, 1)
-            img = np.ascontiguousarray(img, dtype=np.float32)
-            img /= 255.0
-            img = self.normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-            aug_imgs.append(img)
-
-        _ = torch.from_numpy(np.stack(aug_imgs)).float().to(self.device)
-
-        return _
-
-    @staticmethod
-    def normalize(img, mean=None, std=None):
-        if mean is None or std is None:
-            return img
-
-        assert len(mean) == 3 and len(std) == 3
-
-        def sub(x, value):
-            return x - value
-
-        def div(x, value):
-            return x / value
-
-        c0 = div(sub(img[0], mean[0]), std[0])
-        c1 = div(sub(img[1], mean[1]), std[1])
-        c2 = div(sub(img[2], mean[2]), std[2])
-        img = np.stack([c0, c1, c2], axis=0)
-        return img
