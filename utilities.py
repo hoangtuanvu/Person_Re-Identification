@@ -3,7 +3,54 @@ import numpy as np
 import torch
 
 
-def matching(qf, gf, threshold=3.0):
+def img_transform(imgs, new_shape):
+    """
+    Transform images by applying some operators like normalize, resize, ...
+    :param imgs: input images
+    :param new_shape: new size for resize images
+    :return:
+    """
+    aug_imgs = []
+    for img in imgs:
+        img = cv2.resize(img, new_shape, interpolation=cv2.INTER_LINEAR)
+        img = img.transpose(2, 0, 1)
+        img = np.ascontiguousarray(img, dtype=np.float32)
+        img /= 255.0
+        img = normalize(img, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        aug_imgs.append(img)
+
+    _ = torch.from_numpy(np.stack(aug_imgs)).float().to(torch.device('cpu'))
+
+    return _
+
+
+def normalize(img, mean=None, std=None):
+    """
+    Normalize single image by standard and mean
+    :param img: input image in numpy array
+    :param mean:
+    :param std:
+    :return:
+    """
+    if mean is None or std is None:
+        return img
+
+    assert len(mean) == 3 and len(std) == 3
+
+    def sub(x, value):
+        return x - value
+
+    def div(x, value):
+        return x / value
+
+    c0 = div(sub(img[0], mean[0]), std[0])
+    c1 = div(sub(img[1], mean[1]), std[1])
+    c2 = div(sub(img[2], mean[2]), std[2])
+    img = np.stack([c0, c1, c2], axis=0)
+    return img
+
+
+def matching(qf, gf, threshold=3.7):
     """
     Do matching algorithm to compute distance between query embedding and gallery embeddings
     :param threshold: threshold for filtering
@@ -28,7 +75,7 @@ def matching(qf, gf, threshold=3.0):
 
         if float(res[0][0]) < threshold:
             if res[0][1] not in bb_ret:
-                bb_ret.append(res[0][1])
+                bb_ret.append([query_idx, res[0][1]])
 
     return bb_ret
 
@@ -55,8 +102,6 @@ def draw_help_and_fps(img, fps, only_fps=False):
     if not only_fps:
         cv2.putText(img, help_text, (11, 20), font, 1.0, (32, 32, 32), 4, line)
         cv2.putText(img, help_text, (10, 20), font, 1.0, (240, 240, 240), 1, line)
-
-    return img
 
 
 def set_full_screen(full_scrn, window_name):
@@ -109,3 +154,55 @@ def person_filtering(img, boxes, scores, classes, conf_th):
             _out_cls.append(out_cls[i])
 
     return _out_box, _out_conf, _out_cls
+
+
+def boxes_filtering(img, detections, img_size):
+    """
+    Resize output boxes to original and get class = 0 (person)
+    :param img: frame from video or camera live stream
+    :param detections: output boxes from darknet yolov3
+    :param img_size: resize of image
+    """
+    out_box = []
+    out_conf = []
+    out_cls = []
+    h, w, _ = img.shape
+
+    # The amount of padding that was added
+    pad_x = max(img.shape[0] - img.shape[1], 0) * (img_size / max(img.shape))
+    pad_y = max(img.shape[1] - img.shape[0], 0) * (img_size / max(img.shape))
+    # Image height and width after padding is removed
+    unpad_h = img_size - pad_y
+    unpad_w = img_size - pad_x
+
+    for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections.cpu().numpy():
+        if cls_pred == 0:
+            # Rescale coordinates to original dimensions
+            box_h = ((y2 - y1) / unpad_h) * h
+            box_w = ((x2 - x1) / unpad_w) * w
+            y1 = ((y1 - pad_y // 2) / unpad_h) * h
+            x1 = ((x1 - pad_x // 2) / unpad_w) * w
+            out_box.append([int(x1), int(y1), int(box_w), int(box_h)])
+            out_conf.append(conf)
+            out_cls.append(int(cls_pred))
+
+    return out_box, out_conf, out_cls
+
+
+def visualize_box(box):
+    """
+    Convert box with (y, x, h, w) format to (y, x, y + h, x + w) and update current box for negative coordinates
+    :param box: output box from detection model
+    :return: visualization box
+    """
+    vis_box = []
+    for i in range(len(box)):
+        x = box[i][0] if box[i][0] >= 0 else 0
+        box[i][0] = x
+        y = box[i][1] if box[i][1] >= 0 else 0
+        box[i][1] = y
+        w = box[i][2]
+        h = box[i][3]
+        vis_box.append([y, x, y + h, x + w])
+
+    return vis_box
