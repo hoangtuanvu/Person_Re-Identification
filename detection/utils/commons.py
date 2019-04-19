@@ -268,39 +268,6 @@ def scale_coords(img_size, coords, img0_shape):
     return coords
 
 
-def boxes_filtering(img, detections, img_size):
-    """
-    Resize output boxes to original and get class = 0 (person)
-    :param img: frame from video or camera live stream
-    :param detections: output boxes from darknet yolov3
-    :param img_size: resize of image
-    """
-    out_box = []
-    out_conf = []
-    out_cls = []
-    h, w, _ = img.shape
-
-    # The amount of padding that was added
-    pad_x = max(img.shape[0] - img.shape[1], 0) * (img_size / max(img.shape))
-    pad_y = max(img.shape[1] - img.shape[0], 0) * (img_size / max(img.shape))
-    # Image height and width after padding is removed
-    unpad_h = img_size - pad_y
-    unpad_w = img_size - pad_x
-
-    for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections.cpu().numpy():
-        if cls_pred == 0:
-            # Rescale coordinates to original dimensions
-            box_h = ((y2 - y1) / unpad_h) * h
-            box_w = ((x2 - x1) / unpad_w) * w
-            y1 = ((y1 - pad_y // 2) / unpad_h) * h
-            x1 = ((x1 - pad_x // 2) / unpad_w) * w
-            out_box.append([int(x1), int(y1), int(box_w), int(box_h)])
-            out_conf.append(conf)
-            out_cls.append(int(cls_pred))
-
-    return out_box, out_conf, out_cls
-
-
 def xyxy2xywh(x):
     """Convert bounding box format from [x1, y1, x2, y2] to [x, y, w, h]"""
     y = torch.zeros_like(x) if isinstance(x, torch.Tensor) else np.zeros_like(x)
