@@ -87,13 +87,13 @@ def parse_args():
     # ******************************************************************************************************************
     parser.add_argument('-a', '--arch', type=str, default='resnet50')
     parser.add_argument('--reid-weights', type=str,
-                        default='re_id/logs_best/market-1501/PCB/checkpoint.pth.tar',
+                        default='re_id/weights/checkpoint.pth.tar',
                         help='load pretrained weights but ignore layers that don\'t match in size')
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--matching-threshold', dest='matching_threshold',
                         help='distance threshold between query image and gallery',
                         default=3.7, type=float)
-    parser.add_argument('--num-classes', dest='num_classes', default=751,
+    parser.add_argument('--num-classes', dest='num_classes', default=9511,
                         help='(deprecated and not used) number of object classes', type=int)
     # ******************************************************************************************************************
     # Counting
