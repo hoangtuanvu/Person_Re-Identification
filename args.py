@@ -46,6 +46,10 @@ def parse_args():
                         default=720, type=int)
     parser.add_argument('--use-resize', dest='use_resize',
                         action='store_true', help='resize output image for improving FPS')
+    parser.add_argument('--counting-use-reid', dest='counting_use_reid',
+                        action='store_true', help='use person re-identification for counting person')
+    parser.add_argument('--show-fps', dest='show_fps',
+                        default=True, help='show FPS on each frame of video or camera streaming')
     # ******************************************************************************************************************
     # Detection
     # ******************************************************************************************************************
