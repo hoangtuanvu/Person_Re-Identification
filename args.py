@@ -39,15 +39,13 @@ def parse_args():
                         help='device # of USB webcam (/dev/video?) [1]',
                         default=1, type=int)
     parser.add_argument('--width', dest='image_width',
-                        help='image width [1280]',
-                        default=1280, type=int)
+                        help='image width [1920]',
+                        default=1920, type=int)
     parser.add_argument('--height', dest='image_height',
-                        help='image height [720]',
-                        default=720, type=int)
+                        help='image height [1080]',
+                        default=1080, type=int)
     parser.add_argument('--use-resize', dest='use_resize',
                         action='store_true', help='resize output image for improving FPS')
-    parser.add_argument('--counting-use-reid', dest='counting_use_reid',
-                        action='store_true', help='use person re-identification for counting person')
     parser.add_argument('--show-fps', dest='show_fps',
                         default=True, help='show FPS on each frame of video or camera streaming')
     # ******************************************************************************************************************
@@ -97,5 +95,14 @@ def parse_args():
                         default=3.7, type=float)
     parser.add_argument('--num-classes', dest='num_classes', default=751,
                         help='(deprecated and not used) number of object classes', type=int)
+    # ******************************************************************************************************************
+    # Counting
+    # ******************************************************************************************************************
+    parser.add_argument('--counting-use-reid', dest='counting_use_reid',
+                        action='store_true', help='use person re-identification for counting person')
+    parser.add_argument('--save-dir', dest='save_dir',
+                        default='.', type=str)
+    parser.add_argument('--is-saved', dest='is_saved',
+                        action='store_true', help='saves video output for person counting problem')
     args = parser.parse_args()
     return args
