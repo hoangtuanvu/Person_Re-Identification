@@ -64,7 +64,7 @@ class Track:
     """
 
     def __init__(self, mean, covariance, track_id, n_init, max_age,
-                 feature=None):
+                 feature=None, prev_img=None):
         self.mean = mean
         self.covariance = covariance
         self.track_id = track_id
@@ -79,6 +79,7 @@ class Track:
 
         self._n_init = n_init
         self._max_age = max_age
+        self.prev_img = prev_img
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
@@ -123,7 +124,7 @@ class Track:
         self.age += 1
         self.time_since_update += 1
 
-    def update(self, kf, detection):
+    def update(self, kf, detection, prev_img=None):
         """Perform Kalman filter measurement update step and update the feature
         cache.
 
@@ -133,7 +134,7 @@ class Track:
             The Kalman filter.
         detection : Detection
             The associated detection.
-
+        prev_img: previous image for the detection box. It's used for counting person.
         """
         self.mean, self.covariance = kf.update(
             self.mean, self.covariance, detection.to_xyah())
@@ -143,6 +144,7 @@ class Track:
         self.time_since_update = 0
         if self.state == TrackState.Tentative and self.hits >= self._n_init:
             self.state = TrackState.Confirmed
+        self.prev_img = prev_img
 
     def mark_missed(self):
         """Mark this track as missed (no association at the current time step).
@@ -164,3 +166,11 @@ class Track:
     def is_deleted(self):
         """Returns True if this track is dead and should be deleted."""
         return self.state == TrackState.Deleted
+
+    def __str__(self):
+        tmp_dict = {}
+        for key in self.__dict__:
+            if key not in ['mean', 'covariance', 'prev_img', 'features']:
+                tmp_dict[key] = self.__dict__[key]
+
+        return ', '.join(['{key}={value}'.format(key=key, value=self.__dict__.get(key)) for key in tmp_dict])
