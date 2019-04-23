@@ -1,22 +1,20 @@
 from flask import Flask, render_template, Response, request, flash, redirect
-import os
 import re
+import cv2
+import os
 from tracking.sort.sort import Sort
 from tracking.deep_sort import nn_matching
 from tracking.deep_sort.tracker import Tracker
 from tracking.tools import generate_detections as gdet
 from detection.utils.datasets import LoadCamera
 from detection.utils.commons import load_cls_dict
-from detection.utils.parse_config import parse_data_config
 from detection.utils.visualization import BBoxVisualization
 from person_handler import PersonHandler
 from args import parse_args
-
-MEASURE_MODEL_TIME = False
+from re_id.reid.utils.data.iotools import mkdir_if_missing
 
 app = Flask(__name__)
 
-cap = None
 file_path = []
 
 
@@ -74,18 +72,13 @@ print('Load Input Arguments')
 args = parse_args()
 
 print('Load Tracker ...')
-tracker = None
 encoder = None
-
-if args.tracking_type == "sort":
-    tracker = Sort()
-elif args.tracking_type == "deep_sort":
+if args.tracking_type == "deep_sort":
     encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)
     metric = nn_matching.NearestNeighborDistanceMetric("cosine", args.max_cosine_distance)
-    tracker = Tracker(metric)
 
 print('Load Object Detection model ...')
-person_handler = PersonHandler(args)
+person_handler = PersonHandler(args, encoder=encoder)
 
 print('Load Label Map')
 cls_dict = load_cls_dict(args.data_path)
@@ -97,7 +90,7 @@ vis = BBoxVisualization(cls_dict)
 
 @app.route('/person_reid', methods=['GET'])
 def person_reid():
-    return Response(person_handler.loop_and_detect(loader, vis, tracker, encoder, file_path),
+    return Response(person_handler.loop_and_detect(loader, vis, file_path),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
@@ -106,7 +99,26 @@ def video_feed():
     global loader
     loader = LoadCamera(file_path[0], args.img_size)
 
-    return Response(person_handler.loop_and_detect(loader, vis, tracker, encoder, ''),
+    # save output
+    out = None
+    if args.is_saved:
+        mkdir_if_missing(args.save_dir)
+
+        fourcc = cv2.VideoWriter_fourcc(*'XVID')
+        out = cv2.VideoWriter('{}/{}.avi'.format(args.save_dir, os.path.basename(file_path[0][:-4])), fourcc, 10,
+                              (args.image_width, args.image_height), True)
+
+    person_handler.set_out(out)
+
+    tracker = None
+    if args.tracking_type == "sort":
+        tracker = Sort()
+    elif args.tracking_type == "deep_sort":
+        tracker = Tracker(metric)
+
+    person_handler.set_tracker(tracker)
+
+    return Response(person_handler.loop_and_detect(loader, vis, ''),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 

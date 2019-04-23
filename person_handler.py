@@ -19,11 +19,13 @@ from re_id.reid.feature_extraction.cnn import extract_cnn_feature
 
 
 class PersonHandler:
-    def __init__(self, args):
+    def __init__(self, args, encoder=None):
         # Tracking Variables
         self.tracking_type = args.tracking_type
         self.matching_threshold = args.matching_threshold
         self.memory = {}
+        self.tracker = None
+        self.encoder = encoder
 
         # Detection Variables
         self.conf_th = args.conf_th
@@ -53,6 +55,7 @@ class PersonHandler:
         self.device = torch.device('cuda' if self.use_gpu else 'cpu')
         self.use_resize = args.use_resize
         self.show_fps = args.show_fps
+        self.out = None
 
         # Load model Detection
         print('Loading detection model ...')
@@ -75,7 +78,7 @@ class PersonHandler:
         load_checkpoint(reid_model, args.reid_weights)
         self.reid_model = nn.DataParallel(reid_model).cuda() if self.use_gpu else reid_model
 
-    def loop_and_detect(self, loader, vis, tracker, encoder, img_query):
+    def loop_and_detect(self, loader, vis, img_query):
         """Loop, grab images from camera, do object detection and person re-identification.
 
         # Arguments
@@ -90,7 +93,7 @@ class PersonHandler:
         for i, (img, img0) in enumerate(loader):
             display = np.array(img0)
             output = display.copy()
-            box, conf, cls = self.detect_n_track(output, img, encoder, tracker)
+            box, conf, cls = self.detect_n_track(output, img)
 
             if len(img_query) > 0 and len(box) > 0:
                 overlay = display.copy()
@@ -136,6 +139,9 @@ class PersonHandler:
             if self.show_fps:
                 draw_help_and_fps(output, fps, True)
 
+            if self.out is not None:
+                self.out.write(output)
+
             if self.use_resize:
                 output = cv2.resize(output, (640, 480), interpolation=cv2.INTER_LINEAR)
 
@@ -152,7 +158,7 @@ class PersonHandler:
             fps = curr_fps if fps == 0.0 else (fps * 0.9 + curr_fps * 0.1)
             tic = toc
 
-    def detect_n_track(self, origimg, img, encoder, tracker):
+    def detect_n_track(self, origimg, img):
         """Do object detection and object tracking (optional) over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
 
@@ -179,7 +185,7 @@ class PersonHandler:
                 dets.append([x, y, x + w, y + h, _conf[i]])
 
             dets = np.asarray(dets)
-            tracks = tracker.update(dets)
+            tracks = self.tracker.update(dets)
 
             boxes = []
             indexIDs = []
@@ -213,16 +219,16 @@ class PersonHandler:
                     cv2.putText(origimg, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                     i += 1
         elif self.tracking_type == "deep_sort":
-            features = encoder(origimg, _box)
+            features = self.encoder(origimg, _box)
             detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(_box, features)]
             boxes = np.array([d.tlwh for d in detections])
             scores = np.array([d.confidence for d in detections])
             indices = preprocessing.non_max_suppression(boxes, 1.0, scores)
             detections = [detections[i] for i in indices]
-            tracker.predict()
-            tracker.update(detections)
+            self.tracker.predict()
+            self.tracker.update(detections)
 
-            for track in tracker.tracks:
+            for track in self.tracker.tracks:
                 if not track.is_confirmed() or track.time_since_update > 1:
                     continue
                 bbox = track.to_tlbr()
@@ -233,3 +239,9 @@ class PersonHandler:
 
     def extract_embeddings(self, inputs):
         return list(extract_cnn_feature(self.reid_model, inputs))
+
+    def set_out(self, out):
+        self.out = out
+
+    def set_tracker(self, tracker):
+        self.tracker = tracker

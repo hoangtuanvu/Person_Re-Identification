@@ -11,12 +11,8 @@ import cv2
 import os
 from re_id.reid.utils.data.iotools import mkdir_if_missing
 
-MEASURE_MODEL_TIME = False
-
 app = Flask(__name__)
 
-cap = None
-out = None
 file_path = []
 
 
