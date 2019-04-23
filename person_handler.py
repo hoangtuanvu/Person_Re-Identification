@@ -17,8 +17,6 @@ from re_id.reid import models
 from re_id.reid.utils.serialization import load_checkpoint
 from re_id.reid.feature_extraction.cnn import extract_cnn_feature
 
-MEASURE_MODEL_TIME = False
-
 
 class PersonHandler:
     def __init__(self, args):
@@ -78,13 +76,14 @@ class PersonHandler:
         self.reid_model = nn.DataParallel(reid_model).cuda() if self.use_gpu else reid_model
 
     def loop_and_detect(self, loader, vis, tracker, encoder, img_query):
-        """Loop, grab images from camera, and do object detection.
+        """Loop, grab images from camera, do object detection and person re-identification.
 
         # Arguments
-          cam: the camera object (video source).
-          tf_sess: TensorFlow/TensorRT session to run SSD object detection.
-          conf_th: confidence/score threshold for object detection.
-          vis: for visualization.
+          loader: the camera object (video source).
+          vis: visualization tool
+          tracker: is to update detection boxes for tracking.
+          encoder: is to extract features from image (deep sort)
+          img_query: probe image for querying people.
         """
         fps = 0.0
         tic = time.time()
@@ -154,12 +153,7 @@ class PersonHandler:
             tic = toc
 
     def detect_n_track(self, origimg, img, encoder, tracker):
-        """Do object detection over 1 image."""
-        global avg_time
-
-        if MEASURE_MODEL_TIME:
-            tic = time.time()
-
+        """Do object detection and object tracking (optional) over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
 
         # Applies yolov3 detection
@@ -234,11 +228,6 @@ class PersonHandler:
                 bbox = track.to_tlbr()
                 cv2.rectangle(origimg, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (255, 255, 255), 2)
                 cv2.putText(origimg, str(track.track_id), (int(bbox[0]), int(bbox[1])), 0, 5e-3 * 200, (0, 255, 0), 2)
-
-        if MEASURE_MODEL_TIME:
-            td = (time.time() - tic) * 1000  # in ms
-            avg_time = avg_time * 0.9 + td * 0.1
-            print('tf_sess.run() took {:.1f} ms on average'.format(avg_time))
 
         return vis_box, _conf, cls
 
