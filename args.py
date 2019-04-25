@@ -47,7 +47,7 @@ def parse_args():
     parser.add_argument('--use-resize', dest='use_resize',
                         action='store_true', help='resize output image for improving FPS')
     parser.add_argument('--show-fps', dest='show_fps',
-                        default=True, help='show FPS on each frame of video or camera streaming')
+                        action='store_true', help='show FPS on each frame of video or camera streaming')
     # ******************************************************************************************************************
     # Detection
     # ******************************************************************************************************************
