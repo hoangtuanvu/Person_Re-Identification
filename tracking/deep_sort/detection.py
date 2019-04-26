@@ -37,7 +37,7 @@ class Detection(object):
         """
         ret = self.tlwh.copy()
         ret[2:] += ret[:2]
-        return ret
+        return ret.astype(int)
 
     def to_xyah(self):
         """Convert bounding box to format `(center x, center y, aspect ratio,

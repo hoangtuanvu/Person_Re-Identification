@@ -131,8 +131,9 @@ class PersonHandler:
 
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue
-            bbox = track.to_tlbr()
-            cv2.rectangle(origimg, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (255, 255, 255), 2)
+            bbox = track.to_tlbr().astype(int)
+            cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 255, 255), 2)
+            cv2.putText(origimg, str(track.track_id), (bbox[0], bbox[1]), 0, 5e-3 * 200, (0, 255, 0), 2)
 
         self.draw_counting_numbers(origimg, len(detections), total)
 

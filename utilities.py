@@ -191,7 +191,7 @@ def boxes_filtering(img, detections, img_size):
 
 def visualize_box(box):
     """
-    Convert box with (y, x, h, w) format to (y, x, y + h, x + w) and update current box for negative coordinates
+    Convert box with (x, y, w, h) format to (y, x, y + h, x + w) and update current box for negative coordinates
     :param box: output box from detection model
     :return: visualization box
     """

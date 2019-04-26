@@ -48,6 +48,10 @@ def parse_args():
                         action='store_true', help='resize output image for improving FPS')
     parser.add_argument('--show-fps', dest='show_fps',
                         action='store_true', help='show FPS on each frame of video or camera streaming')
+    parser.add_argument('--save-probe', dest='save_probe',
+                        action='store_true', help='save query images automatically')
+    parser.add_argument('--freq', default=5,
+                        type=int, help='save query images by frequency')
     # ******************************************************************************************************************
     # Detection
     # ******************************************************************************************************************

@@ -81,7 +81,7 @@ class Tracker:
             prev_img = None
             if orig_img is not None:
                 x1, y1, x2, y2 = detections[detection_idx].to_tlbr()
-                prev_img = orig_img[int(y1):int(y2), int(x1):int(x2), :]
+                prev_img = orig_img[y1:y2, x1:x2, :]
 
             self.tracks[track_idx].update(
                 self.kf, detections[detection_idx], prev_img)
@@ -150,7 +150,7 @@ class Tracker:
         prev_img = None
         if img is not None:
             x1, y1, x2, y2 = detection.to_tlbr()
-            prev_img = img[int(y1):int(y2), int(x1):int(x2), :]
+            prev_img = img[y1:y2, x1:x2, :]
 
         self.tracks.append(Track(
             mean, covariance, self._next_id, self.n_init, self.max_age,
@@ -161,7 +161,7 @@ class Tracker:
         query = []
         for unmatched_det_idx in unmatched_detections:
             x1, y1, x2, y2 = detections[unmatched_det_idx].to_tlbr()
-            query.append(orig_img[int(y1):int(y2), int(x1):int(x2), :])
+            query.append(orig_img[y1:y2, x1:x2, :])
 
         query_imgs = img_transform(query, (128, 384))
 
@@ -181,7 +181,7 @@ class Tracker:
         for query_idx, gallery_idx in bb_idx:
             x1, y1, x2, y2 = detections[unmatched_detections[query_idx]].to_tlbr()
             self.tracks[gallery_idx].update(
-                self.kf, detections[unmatched_detections[query_idx]], orig_img[int(y1):int(y2), int(x1):int(x2), :])
+                self.kf, detections[unmatched_detections[query_idx]], orig_img[y1:y2, x1:x2, :])
 
         tmp_bb_idx = [[unmatched_detections[query_idx], gallery_idx] for query_idx, gallery_idx in bb_idx]
         for query_val, gallery_idx in tmp_bb_idx:

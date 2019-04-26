@@ -1,5 +1,6 @@
 import cv2
 import time
+import uuid
 import numpy as np
 import torch
 import torch.nn as nn
@@ -14,6 +15,7 @@ from tracking.deep_sort.detection import Detection
 from detection.model.yolov3 import Darknet
 from detection.utils.commons import non_max_suppression
 from re_id.reid import models
+from re_id.reid.utils.data.iotools import mkdir_if_missing
 from re_id.reid.utils.serialization import load_checkpoint
 from re_id.reid.feature_extraction.cnn import extract_cnn_feature
 
@@ -23,7 +25,6 @@ class PersonHandler:
         # Tracking Variables
         self.tracking_type = args.tracking_type
         self.matching_threshold = args.matching_threshold
-        self.memory = {}
         self.tracker = None
         self.encoder = encoder
 
@@ -56,6 +57,9 @@ class PersonHandler:
         self.use_resize = args.use_resize
         self.show_fps = args.show_fps
         self.out = None
+        self.no_frame = 0
+        self.save_probe = args.save_probe
+        self.freq = args.freq
 
         # Load model Detection
         print('Loading detection model ...')
@@ -92,6 +96,7 @@ class PersonHandler:
         fps = 0.0
         tic = time.time()
         for i, (img, img0) in enumerate(loader):
+            self.no_frame += 1
             display = np.array(img0)
             output = display.copy()
             box, conf, cls = self.detect_n_track(output, img)
@@ -162,6 +167,7 @@ class PersonHandler:
     def detect_n_track(self, origimg, img):
         """Do object detection and object tracking (optional) over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
+        raw_img = origimg.copy()
 
         # Applies yolov3 detection
         with torch.no_grad():
@@ -172,8 +178,6 @@ class PersonHandler:
             return [], [], []
 
         _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size)
-
-        vis_box = visualize_box(_box)
 
         if len(_box) == 0:
             return [], [], []
@@ -188,37 +192,19 @@ class PersonHandler:
             dets = np.asarray(dets)
             tracks = self.tracker.update(dets)
 
-            boxes = []
-            indexIDs = []
-            previous = self.memory.copy()
-            self.memory = {}
-
+            tmp_box = []
             for track in tracks:
-                boxes.append([track[0], track[1], track[2], track[3]])
-                indexIDs.append(int(track[4]))
-                self.memory[indexIDs[-1]] = boxes[-1]
+                bbox = np.array(track[:4]).astype(int)
 
-            if len(boxes) > 0:
-                i = int(0)
-                for box in boxes:
-                    # extract the bounding box coordinates
-                    (x, y) = (int(box[0]), int(box[1]))
-                    (w, h) = (int(box[2]), int(box[3]))
+                self.save_probe_dir(int(track[4]), raw_img, bbox)
+                cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 255, 255), 2)
+                cv2.putText(origimg, str(int(track[4])), (bbox[0], bbox[1]), 0, 5e-3 * 200, (0, 255, 0), 2)
 
-                    # draw a bounding box rectangle and label on the image
-                    color = [int(c) for c in self.COLORS[indexIDs[i] % len(self.COLORS)]]
-                    cv2.rectangle(origimg, (x, y), (w, h), color, 2)
+                tlwh = bbox.copy()
+                tlwh[2:] -= tlwh[:2]
+                tmp_box.append(tlwh)
 
-                    if indexIDs[i] in previous:
-                        previous_box = previous[indexIDs[i]]
-                        (x2, y2) = (int(previous_box[0]), int(previous_box[1]))
-                        (w2, h2) = (int(previous_box[2]), int(previous_box[3]))
-                        p0 = (int(x + (w - x) / 2), int(y + (h - y) / 2))
-                        p1 = (int(x2 + (w2 - x2) / 2), int(y2 + (h2 - y2) / 2))
-                        cv2.line(origimg, p0, p1, color, 3)
-                    text = "{}".format(indexIDs[i])
-                    cv2.putText(origimg, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                    i += 1
+            vis_box = visualize_box(tmp_box)
         elif self.tracking_type == "deep_sort":
             features = self.encoder(origimg, _box)
             detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(_box, features)]
@@ -229,12 +215,19 @@ class PersonHandler:
             self.tracker.predict()
             self.tracker.update(detections)
 
+            tmp_box = []
             for track in self.tracker.tracks:
-                if not track.is_confirmed() or track.time_since_update > 1:
+                if track.time_since_update > 1:
                     continue
-                bbox = track.to_tlbr()
-                cv2.rectangle(origimg, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), (255, 255, 255), 2)
-                cv2.putText(origimg, str(track.track_id), (int(bbox[0]), int(bbox[1])), 0, 5e-3 * 200, (0, 255, 0), 2)
+                bbox = track.to_tlbr().astype(int)
+                self.save_probe_dir(track.track_id, raw_img, bbox)
+                cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 255, 255), 2)
+                cv2.putText(origimg, str(track.track_id), (bbox[0], bbox[1]), 0, 5e-3 * 200, (0, 255, 0), 2)
+                tmp_box.append(track.to_tlwh().astype(int))
+
+            vis_box = visualize_box(tmp_box)
+        else:
+            vis_box = visualize_box(_box)
 
         return vis_box, _conf, cls
 
@@ -246,3 +239,12 @@ class PersonHandler:
 
     def set_tracker(self, tracker):
         self.tracker = tracker
+
+    def save_probe_dir(self, track_id, raw_img, bbox):
+        """ save query images in probe directory"""
+        if self.save_probe:
+            dir = 'probe/{}'.format(track_id)
+            mkdir_if_missing(dir)
+            if self.no_frame % self.freq == 0:
+                cv2.imwrite('{}/{}.png'.format(dir, str(uuid.uuid4())),
+                            raw_img[bbox[1]: bbox[3], bbox[0]: bbox[2], :])
