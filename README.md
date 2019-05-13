@@ -37,18 +37,26 @@ mv checkpoint.pth.tar re_id/weights
 
 ## Run Person Re-Identification App
 ```
-python app.py 
+python person_app.py 
     --config-path detection/config/yolov3-tiny.cfg 
     --detection-weight detection/weights/yolov3-tiny.weights 
     -a resnet18
     --tracking-type deep_sort
 ```
 
+## Convert Images to Videos
+```
+python preprocessing.py 
+    --images-dir [image_directory_that_contains_folder_of_image_frames]
+    --output-dir [output_directory_that_contain_videos_outputs]
+```
+
 ## Run Person-Counting App
 ```
 python counting_app.py 
     --config-path detection/config/yolov3.cfg 
-    --detection-weight detection/weights/yolov3.weights 
+    --detection-weight detection/weights/yolov3.weights
+    --reid-weights re_id/logs/market-1501/PCB/checkpoint.pth.tar  
     -a resnet18
     --confidence 0.6 
     --nms-thres 0.3 
@@ -56,4 +64,18 @@ python counting_app.py
     --img-size 608  
     --counting-use-reid 
     --is-saved
+```
+
+## Run Person-Counting by Offline mode
+```
+python counting_objects_runner.py 
+    --config-path detection/config/yolov3.cfg 
+    --detection-weight detection/weights/yolov3.weights 
+    --reid-weights re_id/logs/market-1501/PCB/checkpoint.pth.tar 
+    -a resnet18
+    --confidence 0.4 
+    --nms-thres 0.3 
+    --img-size 608  
+    --counting-use-reid 
+    --inputs videos
 ```

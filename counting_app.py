@@ -1,11 +1,10 @@
 from flask import Flask, render_template, Response, request, flash, redirect
 from tracking.deep_sort import nn_matching
-from tracking.deep_sort.tracker import Tracker
 from tracking.tools import generate_detections as gdet
 from detection.utils.datasets import LoadCamera
 from detection.utils.commons import load_cls_dict
-from detection.utils.visualization import BBoxVisualization
 from counting_objects_handler import PersonHandler
+from utilities import load_cls_out
 from args import parse_args
 import cv2
 import os
@@ -70,15 +69,13 @@ print('Load Tracker ...')
 encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)
 metric = nn_matching.NearestNeighborDistanceMetric("cosine", args.max_cosine_distance)
 
-print('Load Object Detection model ...')
-person_handler = PersonHandler(args)
-
 print('Load Label Map')
 cls_dict = load_cls_dict(args.data_path)
+cls_out = load_cls_out(args.cls_out, cls_dict)
 
-# grab image and do object detection (until stopped by user)
-print('starting to loop and detect')
-vis = BBoxVisualization(cls_dict)
+print('Load Object Detection model ...')
+person_handler = PersonHandler(args, encoder=encoder, cls_out=cls_out, metric=metric)
+person_handler.set_colors()
 
 
 @app.route('/video_feed', methods=['GET'])
@@ -93,11 +90,14 @@ def video_feed():
         fourcc = cv2.VideoWriter_fourcc(*'XVID')
         out = cv2.VideoWriter('{}/{}.avi'.format(args.save_dir, os.path.basename(file_path[0][:-4])), fourcc, 10,
                               (args.image_width, args.image_height), True)
-    tracker = Tracker(metric)
 
-    return Response(person_handler.process(loader, tracker, encoder, out),
+    person_handler.set_out(out)
+    person_handler.init_tracker()
+    person_handler.init_other_trackers()
+
+    return Response(person_handler.online_process(loader),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 if __name__ == '__main__':
-    app.run(port=7000, host="localhost")
+    app.run(port=args.port, host="localhost")

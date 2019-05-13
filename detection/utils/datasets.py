@@ -31,7 +31,7 @@ class LoadCamera:  # for inference
         img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
 
-        return img, img0
+        return None, img, img0
 
     def __len__(self):
         return 0
@@ -87,14 +87,14 @@ class LoadImages:  # for inference
                     ret_val, img0 = self.cap.read()
 
             self.frame += 1
-            print('video %g/%g (%g/%g) %s: ' % (self.count + 1, self.nF, self.frame, self.nframes, path), end='')
+            print('video %g/%g (%g/%g) %s: ' % (self.count + 1, self.nF, self.frame, self.nframes, path))
 
         else:
             # Read image
             self.count += 1
             img0 = cv2.imread(path)  # BGR
             assert img0 is not None, 'File Not Found ' + path
-            print('image %g/%g %s: ' % (self.count, self.nF, path), end='')
+            print('image %g/%g %s: ' % (self.count, self.nF, path))
 
         # Padded resize
         img, _, _, _ = letterbox(img0, height=self.height)
@@ -104,7 +104,7 @@ class LoadImages:  # for inference
         img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
 
-        return path, img, img0, self.cap
+        return path, img, img0
 
     def new_video(self, path):
         self.frame = 0

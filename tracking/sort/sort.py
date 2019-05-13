@@ -35,7 +35,7 @@ def iou(bb_test, bb_gt):
     wh = w * h
     o = wh / ((bb_test[2] - bb_test[0]) * (bb_test[3] - bb_test[1])
               + (bb_gt[2] - bb_gt[0]) * (bb_gt[3] - bb_gt[1]) - wh)
-    return (o)
+    return o
 
 
 def convert_bbox_to_z(bbox):
@@ -60,7 +60,7 @@ def convert_x_to_bbox(x, score=None):
     """
     w = np.sqrt(x[2] * x[3])
     h = x[2] / w
-    if (score == None):
+    if score is None:
         return np.array([x[0] - w / 2., x[1] - h / 2., x[0] + w / 2., x[1] + h / 2.]).reshape((1, 4))
     else:
         return np.array([x[0] - w / 2., x[1] - h / 2., x[0] + w / 2., x[1] + h / 2., score]).reshape((1, 5))
@@ -68,11 +68,10 @@ def convert_x_to_bbox(x, score=None):
 
 class KalmanBoxTracker(object):
     """
-    This class represents the internel state of individual tracked objects observed as bbox.
+    This class represents the internal state of individual tracked objects observed as bbox.
     """
-    count = 0
 
-    def __init__(self, bbox):
+    def __init__(self, bbox, id):
         """
         Initialises a tracker using initial bounding box.
         """
@@ -92,8 +91,7 @@ class KalmanBoxTracker(object):
 
         self.kf.x[:4] = convert_bbox_to_z(bbox)
         self.time_since_update = 0
-        self.id = KalmanBoxTracker.count
-        KalmanBoxTracker.count += 1
+        self.id = id
         self.history = []
         self.hits = 0
         self.hit_streak = 0
@@ -113,11 +111,11 @@ class KalmanBoxTracker(object):
         """
         Advances the state vector and returns the predicted bounding box estimate.
         """
-        if ((self.kf.x[6] + self.kf.x[2]) <= 0):
+        if (self.kf.x[6] + self.kf.x[2]) <= 0:
             self.kf.x[6] *= 0.0
         self.kf.predict()
         self.age += 1
-        if (self.time_since_update > 0):
+        if self.time_since_update > 0:
             self.hit_streak = 0
         self.time_since_update += 1
         self.history.append(convert_x_to_bbox(self.kf.x))
@@ -128,6 +126,14 @@ class KalmanBoxTracker(object):
         Returns the current bounding box estimate.
         """
         return convert_x_to_bbox(self.kf.x)
+
+    def __str__(self):
+        tmp_dict = {}
+        for key in self.__dict__:
+            if key not in ['kf', 'history']:
+                tmp_dict[key] = self.__dict__[key]
+
+        return ', '.join(['{key}={value}'.format(key=key, value=self.__dict__.get(key)) for key in tmp_dict])
 
 
 def associate_detections_to_trackers(detections, trackers, iou_threshold=0.3):
@@ -178,7 +184,7 @@ class Sort(object):
         self.max_age = max_age
         self.min_hits = min_hits
         self.trackers = []
-        self.frame_count = 0
+        self.id = 1
 
     def update(self, dets):
         """
@@ -189,7 +195,6 @@ class Sort(object):
 
         NOTE: The number of objects returned may differ from the number of detections provided.
         """
-        self.frame_count += 1
         # get predicted locations from existing trackers.
         trks = np.zeros((len(self.trackers), 5))
         to_del = []
@@ -197,7 +202,7 @@ class Sort(object):
         for t, trk in enumerate(trks):
             pos = self.trackers[t].predict()[0]
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
-            if (np.any(np.isnan(pos))):
+            if np.any(np.isnan(pos)):
                 to_del.append(t)
         trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
         for t in reversed(to_del):
@@ -206,23 +211,26 @@ class Sort(object):
 
         # update matched trackers with assigned detections
         for t, trk in enumerate(self.trackers):
-            if (t not in unmatched_trks):
+            if t not in unmatched_trks:
                 d = matched[np.where(matched[:, 1] == t)[0], 0]
                 trk.update(dets[d, :][0])
 
         # create and initialise new trackers for unmatched detections
         for i in unmatched_dets:
-            trk = KalmanBoxTracker(dets[i, :])
+            trk = KalmanBoxTracker(dets[i, :], self.id)
             self.trackers.append(trk)
+            self.id += 1
+
         i = len(self.trackers)
         for trk in reversed(self.trackers):
             d = trk.get_state()[0]
-            if ((trk.time_since_update < 1) and (trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits)):
-                ret.append(np.concatenate((d, [trk.id + 1])).reshape(1, -1))  # +1 as MOT benchmark requires positive
+            if (trk.time_since_update < 1) \
+                    and (trk.hit_streak >= self.min_hits):
+                ret.append(np.concatenate((d, [trk.id])).reshape(1, -1))  # +1 as MOT benchmark requires positive
             i -= 1
             # remove dead tracklet
-            if (trk.time_since_update > self.max_age):
+            if trk.time_since_update > self.max_age:
                 self.trackers.pop(i)
-        if (len(ret) > 0):
+        if len(ret) > 0:
             return np.concatenate(ret)
         return np.empty((0, 5))

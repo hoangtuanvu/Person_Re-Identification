@@ -74,6 +74,8 @@ def parse_args():
                         action='store_true', help='force model use cpu for inference')
     parser.add_argument('--images', dest='images',
                         type=str, default='data/samples', help='path to images')
+    parser.add_argument('--port', dest='port', help='opening port for application',
+                        default=7000, type=int)
     # ******************************************************************************************************************
     # Tracking
     # ******************************************************************************************************************
@@ -108,5 +110,13 @@ def parse_args():
                         default='.', type=str)
     parser.add_argument('--is-saved', dest='is_saved',
                         action='store_true', help='saves video output for person counting problem')
+    parser.add_argument('--cls-out', dest='cls_out',
+                        default='cls_out.txt', type=str)
+    parser.add_argument('--inputs', type=str,
+                        help='input for counting objects. It can be videos, images, directory of videos/images')
+    parser.add_argument('--output-name', dest='output_name', type=str,
+                        default='predict', help='name of output file')
+    parser.add_argument('--gt', default='t1_gt.json',
+                        help='Ground truth json file', type=str)
     args = parser.parse_args()
     return args

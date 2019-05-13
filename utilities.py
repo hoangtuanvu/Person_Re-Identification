@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 import torch
+import os
+import json
 
 
 def img_transform(imgs, new_shape):
@@ -156,12 +158,13 @@ def person_filtering(img, boxes, scores, classes, conf_th):
     return _out_box, _out_conf, _out_cls
 
 
-def boxes_filtering(img, detections, img_size):
+def boxes_filtering(img, detections, img_size, cls_out):
     """
     Resize output boxes to original and get class = 0 (person)
     :param img: frame from video or camera live stream
     :param detections: output boxes from darknet yolov3
     :param img_size: resize of image
+    :param cls_out: list of categories need to get
     """
     out_box = []
     out_conf = []
@@ -176,7 +179,10 @@ def boxes_filtering(img, detections, img_size):
     unpad_w = img_size - pad_x
 
     for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections.cpu().numpy():
-        if cls_pred == 0:
+        if int(cls_pred) in cls_out:
+            if cls_pred == 0 and conf <= 0.6:
+                continue
+
             # Rescale coordinates to original dimensions
             box_h = ((y2 - y1) / unpad_h) * h
             box_w = ((x2 - x1) / unpad_w) * w
@@ -206,3 +212,27 @@ def visualize_box(box):
         vis_box.append([y, x, y + h, x + w])
 
     return vis_box
+
+
+def load_cls_out(file_path, cls_dict):
+    if not os.path.exists(file_path):
+        raise ValueError('File does not exist')
+
+    with open(file_path) as f:
+        classes = [cls.replace("\n", "") for cls in f.readlines()]
+
+    cls = []
+    for cls_name in classes:
+        if cls_name in cls_dict.values():
+            cls.append(list(cls_dict.values()).index(cls_name))
+        else:
+            print('Class {} does not exist in Coco Classes'.format(cls_name))
+
+    return cls
+
+
+def read_counting_gt(gt_file):
+    if not os.path.exists(gt_file):
+        raise ValueError('Ground Truth file is not exist!')
+
+    return json.load(open(gt_file))['track1_GT']

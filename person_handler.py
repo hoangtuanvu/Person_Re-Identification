@@ -171,13 +171,13 @@ class PersonHandler:
 
         # Applies yolov3 detection
         with torch.no_grad():
-            detections = self.detect_model(input_imgs)
+            detections, _ = self.detect_model(input_imgs)
             detections = non_max_suppression(detections, self.conf_th, self.nms_thres)[0]
 
         if detections is None:
             return [], [], []
 
-        _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size)
+        _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size, cls_out=[0])
 
         if len(_box) == 0:
             return [], [], []
@@ -198,7 +198,7 @@ class PersonHandler:
 
                 self.save_probe_dir(int(track[4]), raw_img, bbox)
                 cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 255, 255), 2)
-                cv2.putText(origimg, str(int(track[4])), (bbox[0], bbox[1]), 0, 5e-3 * 200, (0, 255, 0), 2)
+                cv2.putText(origimg, str(int(track[4])), (bbox[0], bbox[3]), 0, 5e-3 * 200, (0, 255, 0), 2)
 
                 tlwh = bbox.copy()
                 tlwh[2:] -= tlwh[:2]

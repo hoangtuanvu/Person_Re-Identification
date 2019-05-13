@@ -1,0 +1,6 @@
+person
+fire extinguisher
+fire hydrant
+car
+bicycle
+motorbike
