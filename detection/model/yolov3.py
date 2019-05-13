@@ -14,12 +14,13 @@ from detection.utils.parse_config import parse_model_config
 class Darknet(nn.Module):
     """YOLOv3 object detection model"""
 
-    def __init__(self, cfg_path, img_size=416, device=torch.device('cpu')):
+    def __init__(self, cfg_path, img_size=416, device=torch.device('cpu'), onnx_export=False):
         super(Darknet, self).__init__()
 
         self.module_defs = parse_model_config(cfg_path)
         self.module_defs[0]['cfg'] = cfg_path
         self.module_defs[0]['height'] = img_size
+        self.onnx_export = onnx_export
         self.hyperparams, self.module_list = self.create_modules(self.module_defs, device)
 
     def forward(self, x, var=None):
@@ -45,10 +46,18 @@ class Darknet(nn.Module):
                 output.append(x)
             layer_outputs.append(x)
 
-        return output if self.training else torch.cat(output, 1)
+        if self.training:
+            return output
+        elif self.onnx_export:
+            output = torch.cat(output, 1)  # cat 3 layers 85 x (507, 2028, 8112) to 85 x 10647
+            return output[5:85].t(), output[:4].t()  # ONNX scores, boxes
+        else:
+            io, p = list(zip(*output))  # inference output, training output
+            return torch.cat(io, 1), p
 
-    @staticmethod
-    def create_modules(module_defs, device):
+        # return output if self.training else torch.cat(output, 1)
+
+    def create_modules(self, module_defs, device):
         """
         Constructs module list of layer blocks from module configuration in module_defs
         """
@@ -103,9 +112,12 @@ class Darknet(nn.Module):
                 anchors = [float(x) for x in module_def['anchors'].split(',')]
                 anchors = [(anchors[i], anchors[i + 1]) for i in range(0, len(anchors), 2)]
                 anchors = [anchors[i] for i in anchor_idxs]
-                nC = int(module_def['classes'])  # number of classes
+                nc = int(module_def['classes'])  # number of classes
+                img_size = hyperparams['height']
+
                 # Define detection layer
-                yolo_layer = YOLOLayer(anchors, nC, device)
+                yolo_layer = YOLOLayer(anchors, nc, img_size, yolo_layer_count, cfg=hyperparams['cfg'], device=device,
+                                       onnx_export=self.onnx_export)
                 modules.add_module('yolo_%d' % i, yolo_layer)
                 yolo_layer_count += 1
 
