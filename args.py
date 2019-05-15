@@ -118,5 +118,7 @@ def parse_args():
                         default='predict', help='name of output file')
     parser.add_argument('--gt', default='t1_gt.json',
                         help='Ground truth json file', type=str)
+    parser.add_argument('--save-coordinates',
+                        action='store_true', help='saves coordinates of all objects in a frame with tracking ID')
     args = parser.parse_args()
     return args

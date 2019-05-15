@@ -1,7 +1,6 @@
 import os
 import cv2
 import numpy as np
-import json
 import time
 import torch
 import torch.nn as nn
@@ -18,13 +17,16 @@ from re_id.reid import models
 from re_id.reid.utils.serialization import load_checkpoint
 from utilities import boxes_filtering
 from utilities import read_counting_gt
+from utilities import convert_number_to_image_form
+from utilities import rms
+from utilities import generate_report
 
 font = cv2.FONT_HERSHEY_PLAIN
 line = cv2.LINE_AA
 
 
 class PersonHandler:
-    def __init__(self, args, encoder=None, cls_out=None, metric=None):
+    def __init__(self, args, encoder=None, cls_out=None, metric=None, coordinates_out=None):
         # Tracking Variables
         self.matching_threshold = args.matching_threshold
         self.encoder = encoder
@@ -59,6 +61,7 @@ class PersonHandler:
         self.colors = {}
         self.output_name = args.output_name
         self.gt = args.gt
+        self.coordinates_out = coordinates_out
 
         # Load model Detection
         print('Loading detection model ...')
@@ -102,16 +105,21 @@ class PersonHandler:
     def offline_process(self, loader):
         """Loop, grab images from images/videos, and do count number of objects in Offline mode."""
 
+        start_time = time.time()
         object_cnt_all = []
         total_objects = {}
-        start_time = time.time()
-        for i, (path, img, img0) in enumerate(loader):
-            if loader.frame == 1:
-                print('Processing {}'.format(path))
 
+        # Load ground truth
+        gt = read_counting_gt(self.gt)
+
+        for i, (path, img, img0) in enumerate(loader):
             display = np.array(img0)
             output = display.copy()
-            self.detect_n_counting(output, img, total_objects=total_objects)
+
+            self.detect_n_counting(output, img, total_objects=total_objects, loader=loader)
+
+            if self.out is not None:
+                self.out.write(output)
 
             if loader.frame == loader.nframes:
                 # the last frame on each video
@@ -123,7 +131,8 @@ class PersonHandler:
                         res.append(0)
 
                 res.insert(1, 0)
-                object_cnt = {"id": int(os.path.basename(path).split('.')[0].split('_')[-1]), "objects": res}
+                object_cnt = {"name": os.path.basename(path).split('.')[0], "objects": res,
+                              "rms": rms(gt[loader.count]["objects"], res)}
                 object_cnt_all.append(object_cnt)
 
                 # Reset trackers
@@ -133,31 +142,12 @@ class PersonHandler:
                 # clear total of objects of previous video
                 total_objects.clear()
 
-        with open('{}.txt'.format(self.output_name), 'w') as file:
-            file.write(json.dumps(object_cnt_all))
-
-        # Calculate Errors
-        gt = read_counting_gt(self.gt)
-
-        avg = [0] * 6
-        for i in range(len(object_cnt_all)):
-            sub_gt = gt[i]
-            sub_pred = object_cnt_all[i]
-
-            avg = [avg[j] + abs(sub_gt['objects'][j] - sub_pred['objects'][j]) for j in
-                   range(len(sub_gt['objects']))]
-
-        avg = [item / len(object_cnt_all) for item in avg]
-
-        avg_err = {"err": avg}
-        object_cnt_all.append(avg_err)
-
-        with open('{}_extend.txt'.format(self.output_name), 'w') as file:
-            file.write(json.dumps(object_cnt_all))
+        # Generate Report
+        generate_report(gt, object_cnt_all)
 
         print('Time to process', time.time() - start_time)
 
-    def detect_n_counting(self, origimg, img, total_objects=None):
+    def detect_n_counting(self, origimg, img, total_objects=None, loader=None):
         """Do object detection over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
 
@@ -215,6 +205,9 @@ class PersonHandler:
                     cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), self.colors[cls], 2)
                     cv2.putText(origimg, str(track.track_id), (bbox[0], bbox[1]), 0, 5e-3 * 200, (0, 255, 0), 2)
 
+                    # write coordinates
+                    self.write_coordinates(loader=loader, x=bbox[0], y=bbox[1], w=bbox[2] - bbox[0],
+                                           h=bbox[3] - bbox[1], cls=cls, track_id=track.track_id)
             else:
                 # other objects counting
                 dets = []
@@ -238,6 +231,10 @@ class PersonHandler:
                     cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), self.colors[cls], 2)
                     cv2.putText(origimg, str(int(track.id)), (bbox[0], bbox[3]), 0, 5e-3 * 200, (0, 255, 0), 2)
 
+                    # write coordinates
+                    self.write_coordinates(loader=loader, x=bbox[0], y=bbox[1], w=bbox[2] - bbox[0],
+                                           h=bbox[3] - bbox[1], cls=cls, track_id=int(track.id))
+
             if total_objects is not None:
                 total_objects[cls] = total
 
@@ -245,7 +242,7 @@ class PersonHandler:
         self.out = out
 
     def init_tracker(self):
-        self.tracker = Tracker(self.metric)
+        self.tracker = Tracker(self.metric, max_iou_distance=0.7, max_age=300, n_init=3)
 
     def init_other_trackers(self):
         for cls in self.cls_out:
@@ -259,3 +256,11 @@ class PersonHandler:
         for cls in self.cls_out:
             self.colors[cls] = colors[i]
             i += 1
+
+    def write_coordinates(self, loader, x, y, w, h, cls, track_id):
+        if self.coordinates_out is not None:
+            self.coordinates_out.write('{},{},{},{},{},{},{}\n'.format(
+                '{}_{}.jpg'.format(os.path.basename(loader.path).split('.')[0],
+                                   convert_number_to_image_form(loader.frame)),
+                x, y, w, h, self.cls_out.index(cls) + 1, track_id
+            ))

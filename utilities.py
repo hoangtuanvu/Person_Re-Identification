@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import os
 import json
+import math
+import xlwt
 
 
 def img_transform(imgs, new_shape):
@@ -236,3 +238,32 @@ def read_counting_gt(gt_file):
         raise ValueError('Ground Truth file is not exist!')
 
     return json.load(open(gt_file))['track1_GT']
+
+
+def rms(gt, pred):
+    person_err = 5 * (abs(gt[0] - pred[0]) ** 2)
+    other_errs = sum([abs(gt[i] - pred[i]) ** 2 for i in range(1, len(gt))])
+    return math.sqrt(person_err + other_errs)
+
+
+def convert_number_to_image_form(numb):
+    return '{}{}'.format('0' * (5 - len(str(numb))), numb)
+
+
+def generate_report(gt, pred):
+    book = xlwt.Workbook(encoding="utf-8")
+
+    sheet1 = book.add_sheet("Sheet 1")
+
+    sheet1.write(0, 0, "Folder")
+    sheet1.write(0, 1, "Ground Truth")
+    sheet1.write(0, 2, "Detected object")
+    sheet1.write(0, 3, "Error Score")
+
+    for row in range(0, len(pred)):
+        sheet1.write(row + 1, 0, pred[row]["name"])
+        sheet1.write(row + 1, 1, ','.join(str(item) for item in gt[row]["objects"]))
+        sheet1.write(row + 1, 2, ','.join(str(item) for item in pred[row]["objects"]))
+        sheet1.write(row + 1, 3, pred[row]["rms"])
+
+    book.save("statistics.xls")
