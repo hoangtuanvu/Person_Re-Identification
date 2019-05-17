@@ -4,3 +4,5 @@ fire hydrant
 car
 bicycle
 motorbike
+bus
+truck

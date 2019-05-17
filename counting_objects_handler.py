@@ -19,7 +19,7 @@ from utilities import boxes_filtering
 from utilities import read_counting_gt
 from utilities import convert_number_to_image_form
 from utilities import rms
-from utilities import generate_report
+from utilities import gen_report
 
 font = cv2.FONT_HERSHEY_PLAIN
 line = cv2.LINE_AA
@@ -123,16 +123,9 @@ class PersonHandler:
 
             if loader.frame == loader.nframes:
                 # the last frame on each video
-                res = []
-                for cls in self.cls_out:
-                    if cls in total_objects:
-                        res.append(total_objects[cls])
-                    else:
-                        res.append(0)
-
-                res.insert(1, 0)
-                object_cnt = {"name": os.path.basename(path).split('.')[0], "objects": res,
-                              "rms": rms(gt[loader.count]["objects"], res)}
+                object_cnt = {"name": os.path.basename(path).split('.')[0],
+                              "objects": self.gen_total_objects(total_objects),
+                              "rms": rms(gt[loader.count]["objects"], self.gen_total_objects(total_objects))}
                 object_cnt_all.append(object_cnt)
 
                 # Reset trackers
@@ -143,7 +136,7 @@ class PersonHandler:
                 total_objects.clear()
 
         # Generate Report
-        generate_report(gt, object_cnt_all)
+        gen_report(gt, object_cnt_all)
 
         print('Time to process', time.time() - start_time)
 
@@ -193,7 +186,6 @@ class PersonHandler:
                     self.tracker.update(detections)
 
                 for track in self.tracker.tracks:
-
                     if track.state == TrackState.Confirmed:
                         total += 1
                         if track.time_since_update > 1 and track.hits <= 5:
@@ -242,7 +234,7 @@ class PersonHandler:
         self.out = out
 
     def init_tracker(self):
-        self.tracker = Tracker(self.metric, max_iou_distance=0.7, max_age=300, n_init=3)
+        self.tracker = Tracker(self.metric, max_iou_distance=0.5, max_age=300, n_init=3)
 
     def init_other_trackers(self):
         for cls in self.cls_out:
@@ -264,3 +256,26 @@ class PersonHandler:
                                    convert_number_to_image_form(loader.frame)),
                 x, y, w, h, self.cls_out.index(cls) + 1, track_id
             ))
+
+    def gen_total_objects(self, total_objects):
+        """Generate total number of objects of each output class"""
+        res = []
+
+        for cls in self.cls_out:
+            if cls not in total_objects:
+                total_objects[cls] = 0
+
+        # for Person
+        res.append(total_objects[0])
+        # for Fire extinguisher
+        res.append(0)
+        # for Fire hydrant
+        res.append(total_objects[10])
+        # for Vehicles
+        res.append(total_objects[2] + total_objects[5] + total_objects[7])
+        # for bicycle
+        res.append(total_objects[1])
+        # for motorbike
+        res.append(total_objects[3])
+
+        return res

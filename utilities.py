@@ -250,7 +250,7 @@ def convert_number_to_image_form(numb):
     return '{}{}'.format('0' * (5 - len(str(numb))), numb)
 
 
-def generate_report(gt, pred):
+def gen_report(gt, pred):
     book = xlwt.Workbook(encoding="utf-8")
 
     sheet1 = book.add_sheet("Sheet 1")

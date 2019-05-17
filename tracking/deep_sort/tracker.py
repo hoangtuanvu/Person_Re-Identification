@@ -57,7 +57,7 @@ class Tracker:
         for track in self.tracks:
             track.predict(self.kf)
 
-    def update(self, detections, reid_model=None, orig_img=None, threshold=3.7):
+    def update(self, detections, reid_model=None, orig_img=None, threshold=1.0):
         """Perform measurement update and track management.
 
         Parameters
