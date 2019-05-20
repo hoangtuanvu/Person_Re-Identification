@@ -24,7 +24,7 @@ class LoadCamera:  # for inference
         assert ret_val, 'Webcam Error'
 
         # Padded resize
-        img, _, _, _ = letterbox(img0, height=self.height)
+        img, _, _, _ = letterbox(img0, self.height)
 
         # Normalize RGB
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
@@ -98,7 +98,7 @@ class LoadImages:  # for inference
             print('image %g/%g %s: ' % (self.count, self.nF, path))
 
         # Padded resize
-        img, _, _, _ = letterbox(img0, height=self.height)
+        img, _, _, _ = letterbox(img0, self.height)
 
         # Normalize RGB
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
@@ -161,7 +161,7 @@ class LoadImagesAndLabels(Dataset):  # for training/testing
             cv2.cvtColor(img_hsv, cv2.COLOR_HSV2BGR, dst=img)
 
         h, w, _ = img.shape
-        img, ratio, padw, padh = letterbox(img, height=self.img_size)
+        img, ratio, padw, padh = letterbox(img, self.img_size)
 
         # Load labels
         labels = []
@@ -291,14 +291,30 @@ def random_affine(img, targets=(), degrees=(-10, 10), translate=(.1, .1), scale=
     return imw, targets
 
 
-def letterbox(img, height=416, color=(127.5, 127.5, 127.5)):  # resize a rectangular image to a padded square
+def letterbox(img, new_shape=416, color=(127.5, 127.5, 127.5), mode='square'):
+    """Resize a rectangular image to a 32 pixel multiple rectangle"""
+    print(img.shape)
     shape = img.shape[:2]  # shape = [height, width]
-    ratio = float(height) / max(shape)  # ratio  = old / new
-    new_shape = (round(shape[1] * ratio), round(shape[0] * ratio))
-    dw = (height - new_shape[0]) / 2  # width padding
-    dh = (height - new_shape[1]) / 2  # height padding
-    top, bottom = round(dh - 0.1), round(dh + 0.1)
-    left, right = round(dw - 0.1), round(dw + 0.1)
-    img = cv2.resize(img, new_shape, interpolation=cv2.INTER_LINEAR)  # resized, no border
+
+    if isinstance(new_shape, int):
+        ratio = float(new_shape) / max(shape)
+    else:
+        ratio = max(new_shape) / max(shape)
+
+    new_unpad = (int(round(shape[1] * ratio)), int(round(shape[0] * ratio)))
+
+    if mode is 'auto':  # minimum rectangle
+        dw = np.mod(new_shape - new_unpad[0], 32) / 2  # width padding
+        dh = np.mod(new_shape - new_unpad[1], 32) / 2  # height padding
+    elif mode is 'square':  # square
+        dw = (new_shape - new_unpad[0]) / 2  # width padding
+        dh = (new_shape - new_unpad[1]) / 2  # height padding
+    elif mode is 'rect':  # square
+        dw = (new_shape[1] - new_unpad[0]) / 2  # width padding
+        dh = (new_shape[0] - new_unpad[1]) / 2  # height padding
+
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)  # resized, no border
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # padded square
     return img, ratio, dw, dh

@@ -107,11 +107,12 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
 
     output = [None] * len(prediction)
     for image_i, pred in enumerate(prediction):
-        # Filter out confidence scores below threshold
+        # Multiply conf by class conf to get combined confidence
         class_conf, class_pred = pred[:, 5:].max(1)
         pred[:, 4] *= class_conf
 
-        i = (pred[:, 4] > conf_thres) & (pred[:, 2] > min_wh) & (pred[:, 3] > min_wh)
+        # Select only suitable predictions
+        i = (pred[:, 4] > conf_thres) & (pred[:, 2:4] > min_wh).all(1) & torch.isfinite(pred).all(1)
         pred = pred[i]
 
         # If none are remaining => process next image
@@ -136,19 +137,15 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
         nms_style = 'MERGE'  # 'OR' (default), 'AND', 'MERGE' (experimental)
         for c in pred[:, -1].unique():
             dc = pred[pred[:, -1] == c]  # select class c
-            dc = dc[:min(len(dc), 100)]  # limit to first 100 boxes: https://github.com/ultralytics/yolov3/issues/117
+            n = len(dc)
+            if n == 1:
+                det_max.append(dc)  # No NMS required if only 1 prediction
+                continue
+            elif n > 100:
+                dc = dc[:100]
 
             # Non-maximum suppression
             if nms_style == 'OR':  # default
-                # METHOD1
-                # ind = list(range(len(dc)))
-                # while len(ind):
-                # j = ind[0]
-                # det_max.append(dc[j:j + 1])  # save highest conf detection
-                # reject = (bbox_iou(dc[j], dc[ind]) > nms_thres).nonzero()
-                # [ind.pop(i) for i in reversed(reject)]
-
-                # METHOD2
                 while dc.shape[0]:
                     det_max.append(dc[:1])  # save highest conf detection
                     if len(dc) == 1:  # Stop if we're at the last detection
@@ -165,6 +162,9 @@ def non_max_suppression(prediction, conf_thres=0.5, nms_thres=0.4):
 
             elif nms_style == 'MERGE':  # weighted mixture box
                 while len(dc):
+                    if len(dc) == 1:
+                        det_max.append(dc)
+                        break
                     i = bbox_iou(dc[0], dc) > nms_thres  # iou with other boxes
                     weights = dc[i, 4:5]
                     dc[0, :4] = (weights * dc[i, :4]).sum(0) / weights.sum()
