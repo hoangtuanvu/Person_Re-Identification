@@ -81,7 +81,7 @@ person_handler.set_colors()
 @app.route('/video_feed', methods=['GET'])
 def video_feed():
     global loader
-    loader = LoadCamera(file_path[0], args.img_size)
+    loader = LoadCamera(file_path[0], img_size=args.img_size, resize_mode=args.mode)
 
     out = None
     if args.is_saved:

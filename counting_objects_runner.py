@@ -6,7 +6,6 @@ from counting_objects_handler import PersonHandler
 from utilities import load_cls_out
 from args import parse_args
 from re_id.reid.utils.data.iotools import mkdir_if_missing
-import cv2
 
 print('Load Input Arguments')
 args = parse_args()
@@ -26,18 +25,15 @@ if args.save_coordinates:
 
 print('Load Object Detection model ...')
 person_handler = PersonHandler(args, encoder=encoder, cls_out=cls_out, metric=metric, coordinates_out=coordinates_out)
-out = None
 if args.is_saved:
     mkdir_if_missing(args.save_dir)
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter('{}/tracked_objects.avi'.format(args.save_dir), fourcc, 10,
-                          (args.image_width, args.image_height), True)
+    person_handler.set_saved_dir(args.save_dir)
 
-person_handler.set_out(out)
+# person_handler.set_out(out)
 person_handler.set_colors()
 person_handler.init_tracker()
 person_handler.init_other_trackers()
 
 print('Process Videos in Offline Mode')
-loader = LoadImages(args.inputs, args.img_size)
+loader = LoadImages(args.inputs, img_size=args.img_size, resize_mode=args.mode)
 person_handler.offline_process(loader)

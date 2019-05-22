@@ -1,26 +1,18 @@
-import os.path as osp
-import cv2
 import os
 import argparse
-import glob
 from re_id.reid.utils.data.iotools import mkdir_if_missing
 
 
-def parse_images_to_video(dir, out_dir):
-    if not osp.exists(dir):
-        raise ValueError('Images folder does not exist!')
-
-    dir_name = dir.split('/')[-1]
-    fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-    out = cv2.VideoWriter(os.path.join(out_dir, '{}.mp4'.format(dir_name)), fourcc, 10.0, (1920, 1080))
-
-    imgs_dir = glob.glob('{}/*.jpg'.format(dir))
-    imgs_dir.sort()
-
-    for img_path in imgs_dir:
-        out.write(cv2.imread(img_path))
-
-    out.release()
+def parse_images_to_video(img_dir, args):
+    dir_name = img_dir.split('/')[-1]
+    os.system("ffmpeg -framerate {} -pattern_type glob -i '{}/*.{}' -c:v {} {}/{}.{}"
+              .format(args.frame_rate,  # FPS
+                      img_dir,  # Folder which contains images,
+                      args.img_ext,  # Image Extension,
+                      args.codec,  # Codec for compression
+                      args.output_dir,  # Folder which contains videos after compression
+                      dir_name,  # Video name
+                      args.vid_ext))  # Video Extension
 
 
 if __name__ == '__main__':
@@ -29,6 +21,14 @@ if __name__ == '__main__':
                         type=str, help='Directory of images which transformed to videos')
     parser.add_argument('--output-dir', default='videos',
                         type=str, help='Directory of output videos')
+    parser.add_argument('--f', dest='frame_rate', default=10,
+                        type=int, help='FPS or Frames Per Second')
+    parser.add_argument('--c', dest='codec', default='libx264',
+                        type=str, help='codec type for saving videos')
+    parser.add_argument('--img-ext', default='jpg',
+                        type=str, help='image extension')
+    parser.add_argument('--vid-ext', default='mp4',
+                        type=str, help='video extension')
 
     args = parser.parse_args()
 
@@ -36,4 +36,4 @@ if __name__ == '__main__':
     mkdir_if_missing(args.output_dir)
 
     for sub_dir in os.listdir(args.images_dir):
-        parse_images_to_video(os.path.join(args.images_dir, sub_dir), args.output_dir)
+        parse_images_to_video(os.path.join(args.images_dir, sub_dir), args)

@@ -40,6 +40,7 @@ class PersonHandler:
         self.conf_th = args.conf_th
         self.nms_thres = args.nms_thres
         self.img_size = args.img_size
+        self.resize_mode = args.mode
 
         # Re-ID Variables
         self.counting_use_reid = args.counting_use_reid
@@ -62,6 +63,9 @@ class PersonHandler:
         self.output_name = args.output_name
         self.gt = args.gt
         self.coordinates_out = coordinates_out
+        self.saved_dir = None
+        self.image_width = args.image_width
+        self.image_height = args.image_height
 
         # Load model Detection
         print('Loading detection model ...')
@@ -112,14 +116,20 @@ class PersonHandler:
         # Load ground truth
         gt = read_counting_gt(self.gt)
 
+        out = None
         for i, (path, img, img0) in enumerate(loader):
+
+            if self.saved_dir is not None and out is None:
+                out = cv2.VideoWriter('{}/{}.avi'.format(self.saved_dir, os.path.basename(path).split('.')[0]),
+                                      cv2.VideoWriter_fourcc(*'XVID'), 10, (self.image_width, self.image_height), True)
+
             display = np.array(img0)
             output = display.copy()
 
             self.detect_n_counting(output, img, total_objects=total_objects, loader=loader)
 
-            if self.out is not None:
-                self.out.write(output)
+            if out is not None:
+                out.write(output)
 
             if loader.frame == loader.nframes:
                 # the last frame on each video
@@ -134,6 +144,9 @@ class PersonHandler:
 
                 # clear total of objects of previous video
                 total_objects.clear()
+
+                # Reset out
+                out = None
 
         # Generate Report
         gen_report(gt, object_cnt_all)
@@ -152,7 +165,8 @@ class PersonHandler:
         if detections is None:
             return [], [], []
 
-        box, conf, cls = boxes_filtering(origimg, detections, self.img_size, cls_out=self.cls_out)
+        box, conf, cls = boxes_filtering(origimg, detections, self.img_size, cls_out=self.cls_out,
+                                         mode=self.resize_mode)
 
         if len(box) == 0:
             return [], [], []
@@ -233,8 +247,11 @@ class PersonHandler:
     def set_out(self, out):
         self.out = out
 
+    def set_saved_dir(self, saved_dir):
+        self.saved_dir = saved_dir
+
     def init_tracker(self):
-        self.tracker = Tracker(self.metric, max_iou_distance=0.5, max_age=300, n_init=3)
+        self.tracker = Tracker(self.metric)
 
     def init_other_trackers(self):
         for cls in self.cls_out:

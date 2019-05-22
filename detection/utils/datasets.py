@@ -10,9 +10,10 @@ from .commons import xyxy2xywh
 
 
 class LoadCamera:  # for inference
-    def __init__(self, file_path, img_size=416):
+    def __init__(self, file_path, img_size=416, resize_mode='square'):
         self.cam = cv2.VideoCapture(file_path)
         self.height = img_size
+        self.resize_mode = resize_mode
 
     def __iter__(self):
         self.count = -1
@@ -24,7 +25,7 @@ class LoadCamera:  # for inference
         assert ret_val, 'Webcam Error'
 
         # Padded resize
-        img, _, _, _ = letterbox(img0, self.height)
+        img, _, _, _ = letterbox(img0, self.height, mode=self.resize_mode)
 
         # Normalize RGB
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
@@ -38,7 +39,7 @@ class LoadCamera:  # for inference
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=416):
+    def __init__(self, path, img_size=416, resize_mode='square'):
         self.height = img_size
         img_formats = ['.jpg', '.jpeg', '.png', '.tif']
         vid_formats = ['.mov', '.avi', '.mp4']
@@ -57,6 +58,7 @@ class LoadImages:  # for inference
         self.nF = nI + nV  # number of files
         self.video_flag = [False] * nI + [True] * nV
         self.mode = 'images'
+        self.resize_mode = resize_mode
         if any(videos):
             self.new_video(videos[0])  # new video
         else:
@@ -98,7 +100,7 @@ class LoadImages:  # for inference
             print('image %g/%g %s: ' % (self.count, self.nF, path))
 
         # Padded resize
-        img, _, _, _ = letterbox(img0, self.height)
+        img, _, _, _ = letterbox(img0, self.height, mode=self.resize_mode)
 
         # Normalize RGB
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
@@ -291,25 +293,22 @@ def random_affine(img, targets=(), degrees=(-10, 10), translate=(.1, .1), scale=
     return imw, targets
 
 
-def letterbox(img, new_shape=416, color=(127.5, 127.5, 127.5), mode='square'):
+def letterbox(img, new_shape=416, color=(127.5, 127.5, 127.5), mode='auto'):
     """Resize a rectangular image to a 32 pixel multiple rectangle"""
-    print(img.shape)
     shape = img.shape[:2]  # shape = [height, width]
-
     if isinstance(new_shape, int):
         ratio = float(new_shape) / max(shape)
     else:
         ratio = max(new_shape) / max(shape)
 
     new_unpad = (int(round(shape[1] * ratio)), int(round(shape[0] * ratio)))
-
-    if mode is 'auto':  # minimum rectangle
+    if mode == 'auto':  # minimum rectangle
         dw = np.mod(new_shape - new_unpad[0], 32) / 2  # width padding
         dh = np.mod(new_shape - new_unpad[1], 32) / 2  # height padding
-    elif mode is 'square':  # square
+    elif mode == 'square':  # square
         dw = (new_shape - new_unpad[0]) / 2  # width padding
         dh = (new_shape - new_unpad[1]) / 2  # height padding
-    elif mode is 'rect':  # square
+    elif mode == 'rect':  # square
         dw = (new_shape[1] - new_unpad[0]) / 2  # width padding
         dh = (new_shape[0] - new_unpad[1]) / 2  # height padding
 

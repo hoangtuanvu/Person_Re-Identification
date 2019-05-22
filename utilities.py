@@ -160,19 +160,19 @@ def person_filtering(img, boxes, scores, classes, conf_th):
     return _out_box, _out_conf, _out_cls
 
 
-def boxes_filtering(img, detections, img_size, cls_out):
+def boxes_filtering(img, detections, img_size, cls_out, mode='auto'):
     """
     Resize output boxes to original and get class = 0 (person)
     :param img: frame from video or camera live stream
     :param detections: output boxes from darknet yolov3
     :param img_size: resize of image
     :param cls_out: list of categories need to get
+    :param mode: resize mode
     """
     out_box = []
     out_conf = []
     out_cls = []
     h, w, _ = img.shape
-
     # The amount of padding that was added
     pad_x = max(img.shape[0] - img.shape[1], 0) * (img_size / max(img.shape))
     pad_y = max(img.shape[1] - img.shape[0], 0) * (img_size / max(img.shape))
@@ -188,8 +188,13 @@ def boxes_filtering(img, detections, img_size, cls_out):
             # Rescale coordinates to original dimensions
             box_h = ((y2 - y1) / unpad_h) * h
             box_w = ((x2 - x1) / unpad_w) * w
-            y1 = ((y1 - pad_y // 2) / unpad_h) * h
-            x1 = ((x1 - pad_x // 2) / unpad_w) * w
+            if mode == 'square':
+                y1 = ((y1 - pad_y // 2) / unpad_h) * h
+                x1 = ((x1 - pad_x // 2) / unpad_w) * w
+            else:
+                y1 = ((y1 - np.mod(pad_y, 32) // 2) / unpad_h) * h
+                x1 = ((x1 - np.mod(pad_x, 32) // 2) / unpad_w) * w
+
             out_box.append([int(x1), int(y1), int(box_w), int(box_h)])
             out_conf.append(conf)
             out_cls.append(int(cls_pred))

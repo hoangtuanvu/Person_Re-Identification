@@ -95,7 +95,7 @@ class PersonHandler:
         """
         fps = 0.0
         tic = time.time()
-        for i, (img, img0) in enumerate(loader):
+        for i, (_, img, img0) in enumerate(loader):
             self.no_frame += 1
             display = np.array(img0)
             output = display.copy()

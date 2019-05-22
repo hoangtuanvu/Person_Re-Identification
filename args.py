@@ -76,6 +76,8 @@ def parse_args():
                         type=str, default='data/samples', help='path to images')
     parser.add_argument('--port', dest='port', help='opening port for application',
                         default=7000, type=int)
+    parser.add_argument('--mode', default='square', choices=['auto', 'square', 'rect'],
+                        type=str, help='resize image mode for object detection')
     # ******************************************************************************************************************
     # Tracking
     # ******************************************************************************************************************
