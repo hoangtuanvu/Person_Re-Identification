@@ -64,6 +64,7 @@ class PersonHandler:
         self.gt = args.gt
         self.coordinates_out = coordinates_out
         self.saved_dir = None
+        self.track_dir = None
         self.image_width = args.image_width
         self.image_height = args.image_height
 
@@ -126,21 +127,20 @@ class PersonHandler:
             display = np.array(img0)
             output = display.copy()
 
-            self.detect_n_counting(output, img, total_objects=total_objects, loader=loader)
+            self.detect_n_counting(output, img, loader=loader)
 
             if out is not None:
                 out.write(output)
 
             if loader.frame == loader.nframes:
+                # Process counts and tracks
+                self.write_tracks_n_counts(loader=loader, total_objects=total_objects)
+
                 # the last frame on each video
                 object_cnt = {"name": os.path.basename(path).split('.')[0],
                               "objects": self.gen_total_objects(total_objects),
                               "rms": rms(gt[loader.count]["objects"], self.gen_total_objects(total_objects))}
                 object_cnt_all.append(object_cnt)
-
-                # Reset trackers
-                self.init_tracker()
-                self.init_other_trackers()
 
                 # clear total of objects of previous video
                 total_objects.clear()
@@ -148,12 +148,16 @@ class PersonHandler:
                 # Reset out
                 out = None
 
+                # Reset trackers
+                self.init_tracker()
+                self.init_other_trackers()
+
         # Generate Report
         gen_report(gt, object_cnt_all)
 
         print('Time to process', time.time() - start_time)
 
-    def detect_n_counting(self, origimg, img, total_objects=None, loader=None):
+    def detect_n_counting(self, origimg, img, loader=None):
         """Do object detection over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
 
@@ -183,7 +187,6 @@ class PersonHandler:
             cls_boxes = cls_out_dict[cls][0]
             cls_conf = cls_out_dict[cls][1]
 
-            total = 0
             if cls == 0:
                 # person counting
                 features = self.encoder(origimg, cls_boxes)
@@ -200,10 +203,6 @@ class PersonHandler:
                     self.tracker.update(detections)
 
                 for track in self.tracker.tracks:
-                    if track.state == TrackState.Confirmed:
-                        total += 1
-                        if track.time_since_update > 1 and track.hits <= 5:
-                            total -= 1
 
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
@@ -226,9 +225,6 @@ class PersonHandler:
 
                 for track in self.other_trackers[cls].trackers:
                     bbox = np.array(track.get_state()[0]).astype(int)
-                    total += 1
-                    if track.time_since_update > 1 and track.hits < 5:
-                        total -= 1
 
                     if (track.time_since_update > 1) or \
                             (track.hit_streak < 3):
@@ -241,14 +237,14 @@ class PersonHandler:
                     self.write_coordinates(loader=loader, x=bbox[0], y=bbox[1], w=bbox[2] - bbox[0],
                                            h=bbox[3] - bbox[1], cls=cls, track_id=int(track.id))
 
-            if total_objects is not None:
-                total_objects[cls] = total
-
     def set_out(self, out):
         self.out = out
 
     def set_saved_dir(self, saved_dir):
         self.saved_dir = saved_dir
+
+    def set_track_dir(self, track_dir):
+        self.track_dir = track_dir
 
     def init_tracker(self):
         self.tracker = Tracker(self.metric)
@@ -273,6 +269,40 @@ class PersonHandler:
                                    convert_number_to_image_form(loader.frame)),
                 x, y, w, h, self.cls_out.index(cls) + 1, track_id
             ))
+
+    def write_tracks_n_counts(self, loader, total_objects=None):
+        if self.track_dir is not None:
+            f = open('{}/{}.txt'.format(self.track_dir, os.path.basename(loader.path).split('.')[0]), 'w')
+
+        # Process other objects like cars, truck,...
+        for cls in self.other_trackers:
+            total = 0
+            for track in self.other_trackers[cls].trackers:
+                bbox = np.array(track.get_state()[0]).astype(int)
+
+                if self.track_dir is not None:
+                    f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
+                        cls, track, bbox[0], bbox[1], bbox[2], bbox[3], bbox[2] - bbox[0], bbox[3] - bbox[1]))
+
+                if track.hits >= 4:
+                    total += 1
+
+            total_objects[cls] = total
+        else:
+            # Process people
+            total = 0
+
+            for track in self.tracker.tracks:
+                bbox = track.to_tlbr().astype(int)
+
+                if self.track_dir is not None:
+                    f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
+                        0, track, bbox[0], bbox[1], bbox[2], bbox[3], bbox[2] - bbox[0], bbox[3] - bbox[1]))
+
+                if track.hits >= 5:
+                    total += 1
+
+            total_objects[0] = total
 
     def gen_total_objects(self, total_objects):
         """Generate total number of objects of each output class"""

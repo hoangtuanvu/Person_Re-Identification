@@ -52,6 +52,10 @@ def parse_args():
                         action='store_true', help='save query images automatically')
     parser.add_argument('--freq', default=5,
                         type=int, help='save query images by frequency')
+    parser.add_argument('--track-dir', default='tracks',
+                        type=str, help='save object tracks')
+    parser.add_argument('--save-tracks',
+                        action='store_true', help='allow to save object tracks')
     # ******************************************************************************************************************
     # Detection
     # ******************************************************************************************************************

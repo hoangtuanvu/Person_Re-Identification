@@ -29,6 +29,10 @@ if args.is_saved:
     mkdir_if_missing(args.save_dir)
     person_handler.set_saved_dir(args.save_dir)
 
+if args.save_tracks:
+    mkdir_if_missing(args.track_dir)
+    person_handler.set_track_dir(args.track_dir)
+
 # person_handler.set_out(out)
 person_handler.set_colors()
 person_handler.init_tracker()
