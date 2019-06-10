@@ -177,7 +177,7 @@ class PersonHandler:
         if detections is None:
             return [], [], []
 
-        _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size, cls_out=[0])
+        _box, _conf, cls = boxes_filtering(origimg, detections, self.img_size, cls_out=[0], mode='square')
 
         if len(_box) == 0:
             return [], [], []

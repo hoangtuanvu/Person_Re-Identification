@@ -182,9 +182,6 @@ def boxes_filtering(img, detections, img_size, cls_out, mode='auto'):
 
     for x1, y1, x2, y2, conf, cls_conf, cls_pred in detections.cpu().numpy():
         if int(cls_pred) in cls_out:
-            if cls_pred == 0 and conf <= 0.6:
-                continue
-
             # Rescale coordinates to original dimensions
             box_h = ((y2 - y1) / unpad_h) * h
             box_w = ((x2 - x1) / unpad_w) * w
@@ -194,6 +191,9 @@ def boxes_filtering(img, detections, img_size, cls_out, mode='auto'):
             else:
                 y1 = ((y1 - np.mod(pad_y, 32) // 2) / unpad_h) * h
                 x1 = ((x1 - np.mod(pad_x, 32) // 2) / unpad_w) * w
+
+            if cls_pred == 0 and (conf <= 0.6 or int(box_w) <= 10 or int(box_h) <= 10):
+                continue
 
             out_box.append([int(x1), int(y1), int(box_w), int(box_h)])
             out_conf.append(conf)
@@ -251,8 +251,10 @@ def rms(gt, pred):
     return math.sqrt(person_err + other_errs)
 
 
-def convert_number_to_image_form(numb):
-    return '{}{}'.format('0' * (5 - len(str(numb))), numb)
+def convert_number_to_image_form(numb, start_digit='0', max_length=4):
+    assert len(str(numb)) < max_length + 1
+
+    return '{}{}'.format(str(start_digit) + '0' * (max_length - len(str(numb))), numb)
 
 
 def gen_report(gt, pred):

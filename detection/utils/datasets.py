@@ -14,12 +14,14 @@ class LoadCamera:  # for inference
         self.cam = cv2.VideoCapture(file_path)
         self.height = img_size
         self.resize_mode = resize_mode
+        self.path = file_path
 
     def __iter__(self):
-        self.count = -1
+        self.frame = 0
         return self
 
     def __next__(self):
+        self.frame += 1
         # Read image
         ret_val, img0 = self.cam.read()
         assert ret_val, 'Webcam Error'

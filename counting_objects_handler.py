@@ -8,12 +8,12 @@ from torch.backends import cudnn
 from tracking.sort.sort import Sort
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection
-from tracking.deep_sort.track import TrackState
 from tracking.deep_sort.tracker import Tracker
 from detection.model.yolov3 import Darknet
 from detection.utils.commons import non_max_suppression
 from detection.utils.visualization import gen_colors
 from re_id.reid import models
+from re_id.reid.utils.data.iotools import mkdir_if_missing
 from re_id.reid.utils.serialization import load_checkpoint
 from utilities import boxes_filtering
 from utilities import read_counting_gt
@@ -67,6 +67,7 @@ class PersonHandler:
         self.track_dir = None
         self.image_width = args.image_width
         self.image_height = args.image_height
+        self.save_probe = args.save_probe
 
         # Load model Detection
         print('Loading detection model ...')
@@ -95,7 +96,7 @@ class PersonHandler:
         for i, (_, img, img0) in enumerate(loader):
             display = np.array(img0)
             output = display.copy()
-            self.detect_n_counting(output, img)
+            self.detect_n_counting(output, img, loader=loader)
 
             if self.out is not None:
                 self.out.write(output)
@@ -160,6 +161,7 @@ class PersonHandler:
     def detect_n_counting(self, origimg, img, loader=None):
         """Do object detection over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
+        raw_img = origimg.copy()
 
         # Applies yolov3 detection
         with torch.no_grad():
@@ -169,7 +171,7 @@ class PersonHandler:
         if detections is None:
             return [], [], []
 
-        box, conf, cls = boxes_filtering(origimg, detections, self.img_size, cls_out=self.cls_out,
+        box, conf, cls = boxes_filtering(raw_img, detections, self.img_size, cls_out=self.cls_out,
                                          mode=self.resize_mode)
 
         if len(box) == 0:
@@ -198,15 +200,20 @@ class PersonHandler:
 
                 self.tracker.predict()
                 if self.counting_use_reid:
-                    self.tracker.update(detections, self.reid_model, origimg, self.matching_threshold)
+                    self.tracker.update(detections, self.reid_model, raw_img, self.matching_threshold)
                 else:
                     self.tracker.update(detections)
 
                 for track in self.tracker.tracks:
+                    bbox = track.to_tlbr().astype(int)
+
+                    # save tracked list
+                    self.save_probe_dir(video_id=os.path.basename(loader.path).split('.')[0][1:],
+                                        track_id=track.track_id, raw_img=raw_img, bbox=bbox)
 
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
-                    bbox = track.to_tlbr().astype(int)
+
                     cv2.rectangle(origimg, (bbox[0], bbox[1]), (bbox[2], bbox[3]), self.colors[cls], 2)
                     cv2.putText(origimg, str(track.track_id), (bbox[0], bbox[1]), 0, 5e-3 * 200, (0, 255, 0), 2)
 
@@ -299,7 +306,7 @@ class PersonHandler:
                     f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
                         0, track, bbox[0], bbox[1], bbox[2], bbox[3], bbox[2] - bbox[0], bbox[3] - bbox[1]))
 
-                if track.hits >= 5:
+                if track.hits >= 6:
                     total += 1
 
             total_objects[0] = total
@@ -326,3 +333,26 @@ class PersonHandler:
         res.append(total_objects[3])
 
         return res
+
+    def save_probe_dir(self, video_id, track_id, raw_img, bbox):
+        """ save query images in probe directory"""
+        if self.save_probe:
+            new_track_id = convert_number_to_image_form(int(track_id), start_digit='2', max_length=3)
+            dir = 'tracking_images/{}/{}'.format(video_id, new_track_id)
+
+            # create folder if not exist
+            mkdir_if_missing(dir)
+
+            # write images
+            obj_img = raw_img[bbox[1]: bbox[3], bbox[0]: bbox[2], :]
+            h, w, _ = obj_img.shape
+
+            if h == 0 or w == 0:
+                return
+
+            obj_img = cv2.resize(obj_img, (128, 256), interpolation=cv2.INTER_LINEAR)
+
+            cur_idx = len(os.listdir(dir))
+            cv2.imwrite('{}/{}C1T{}F{}.jpg'.format(dir, new_track_id, new_track_id,
+                                                   convert_number_to_image_form(cur_idx, start_digit='', max_length=3)),
+                        obj_img)
