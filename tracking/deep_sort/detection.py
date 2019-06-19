@@ -37,7 +37,6 @@ class Detection(object):
         """
         ret = self.tlwh.copy()
         ret[2:] += ret[:2]
-        self.filter_negative_values(ret)
         return ret.astype(int)
 
     def to_xyah(self):
@@ -48,8 +47,3 @@ class Detection(object):
         ret[:2] += ret[2:] / 2
         ret[2] /= ret[3]
         return ret
-
-    @staticmethod
-    def filter_negative_values(ret):
-        for i in range(len(ret)):
-            ret[i] = ret[i] if ret[i] >= 0 else 0
