@@ -1,0 +1,6 @@
+classes= 7
+train=data/train.txt
+valid=data/valid.txt
+names=data/coco.names
+backup=backup/
+eval=coco
