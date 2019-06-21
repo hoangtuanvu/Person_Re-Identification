@@ -64,7 +64,10 @@ class PersonHandler:
         # Load model Detection
         print('Loading detection model ...')
         detect_model = Darknet(args.config_path, img_size=self.img_size, device=self.device)
-        detect_model.load_darknet_weights(args.detection_weight)
+        if args.detection_weight.endswith('.pt'):
+            detect_model.load_state_dict(torch.load(args.detection_weight, map_location=self.device)['model'])
+        else:
+            detect_model.load_darknet_weights(args.detection_weight)
         detect_model.fuse()
 
         self.detect_model = nn.DataParallel(detect_model).cuda() if self.use_gpu else detect_model

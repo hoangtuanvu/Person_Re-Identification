@@ -192,10 +192,15 @@ def boxes_filtering(img, detections, img_size, cls_out, mode='auto'):
                 y1 = ((y1 - np.mod(pad_y, 32) // 2) / unpad_h) * h
                 x1 = ((x1 - np.mod(pad_x, 32) // 2) / unpad_w) * w
 
-            if cls_pred == 0 and (conf <= 0.6 or int(box_w) <= 10 or int(box_h) <= 10):
+            if cls_pred == 0 and (conf <= 0.6 or min(box_h, box_w) <= 10):
                 continue
 
-            out_box.append([int(x1), int(y1), int(box_w), int(box_h)])
+            if cls_pred in [2, 5, 7] and (conf <= 0.55 or box_w < 30 or box_h < 30):
+                continue
+
+            box = [int(x1), int(y1), int(box_w), int(box_h)]
+            filter_negative_values(box)
+            out_box.append(box)
             out_conf.append(conf)
             out_cls.append(int(cls_pred))
 
@@ -274,3 +279,8 @@ def gen_report(gt, pred):
         sheet1.write(row + 1, 3, pred[row]["rms"])
 
     book.save("statistics.xls")
+
+
+def filter_negative_values(ret):
+    for i in range(len(ret)):
+        ret[i] = ret[i] if ret[i] >= 0 else 0

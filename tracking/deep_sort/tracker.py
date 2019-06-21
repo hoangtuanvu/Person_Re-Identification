@@ -154,7 +154,7 @@ class Tracker:
 
         self.tracks.append(Track(
             mean, covariance, self._next_id, self.n_init, self.max_age,
-            detection.feature, prev_img))
+            feature=detection.feature, prev_img=prev_img, init_bbox=detection.tlwh))
         self._next_id += 1
 
     def filter_by_re_id(self, detections, unmatched_detections, unmatched_tracks, orig_img, reid_model, threshold):

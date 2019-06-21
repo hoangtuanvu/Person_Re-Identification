@@ -64,7 +64,7 @@ class Track:
     """
 
     def __init__(self, mean, covariance, track_id, n_init, max_age,
-                 feature=None, prev_img=None):
+                 feature=None, prev_img=None, init_bbox=None):
         self.mean = mean
         self.covariance = covariance
         self.track_id = track_id
@@ -80,6 +80,7 @@ class Track:
         self._n_init = n_init
         self._max_age = max_age
         self.prev_img = prev_img
+        self.init_bbox = init_bbox
 
     def to_tlwh(self):
         """Get current position in bounding box format `(top left x, top left y,
@@ -170,7 +171,7 @@ class Track:
     def __str__(self):
         tmp_dict = {}
         for key in self.__dict__:
-            if key not in ['mean', 'covariance', 'prev_img', 'features']:
+            if key not in ['mean', 'covariance', 'prev_img', 'features', 'init_bbox']:
                 tmp_dict[key] = self.__dict__[key]
 
         return ', '.join(['{key}={value}'.format(key=key, value=self.__dict__.get(key)) for key in tmp_dict])

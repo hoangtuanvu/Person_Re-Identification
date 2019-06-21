@@ -72,7 +72,10 @@ class PersonHandler:
         # Load model Detection
         print('Loading detection model ...')
         detect_model = Darknet(args.config_path, img_size=self.img_size, device=self.device)
-        detect_model.load_darknet_weights(args.detection_weight)
+        if args.detection_weight.endswith('.pt'):
+            detect_model.load_state_dict(torch.load(args.detection_weight, map_location=self.device)['model'])
+        else:
+            detect_model.load_darknet_weights(args.detection_weight)
 
         self.detect_model = nn.DataParallel(detect_model).cuda() if self.use_gpu else detect_model
         self.detect_model.eval()
@@ -191,7 +194,7 @@ class PersonHandler:
 
             if cls == 0:
                 # person counting
-                features = self.encoder(origimg, cls_boxes)
+                features = self.encoder(raw_img, cls_boxes)
                 detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(cls_boxes, features)]
                 boxes = np.array([d.tlwh for d in detections])
                 scores = np.array([d.confidence for d in detections])
@@ -232,7 +235,6 @@ class PersonHandler:
 
                 for track in self.other_trackers[cls].trackers:
                     bbox = np.array(track.get_state()[0]).astype(int)
-
                     if (track.time_since_update > 1) or \
                             (track.hit_streak < 3):
                         continue
@@ -285,14 +287,18 @@ class PersonHandler:
         for cls in self.other_trackers:
             total = 0
             for track in self.other_trackers[cls].trackers:
-                bbox = np.array(track.get_state()[0]).astype(int)
+                bbox = np.array(track.tlbr).astype(int)
 
                 if self.track_dir is not None:
                     f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
                         cls, track, bbox[0], bbox[1], bbox[2], bbox[3], bbox[2] - bbox[0], bbox[3] - bbox[1]))
 
-                if track.hits >= 4:
-                    total += 1
+                if cls in [2, 5, 7]:
+                    if track.hits >= 6:
+                        total += 1
+                else:
+                    if track.hits >= 4:
+                        total += 1
 
             total_objects[cls] = total
         else:
@@ -300,11 +306,11 @@ class PersonHandler:
             total = 0
 
             for track in self.tracker.tracks:
-                bbox = track.to_tlbr().astype(int)
+                bbox = track.init_bbox.astype(int)
 
                 if self.track_dir is not None:
                     f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
-                        0, track, bbox[0], bbox[1], bbox[2], bbox[3], bbox[2] - bbox[0], bbox[3] - bbox[1]))
+                        0, track, bbox[0], bbox[1], bbox[2] + bbox[0], bbox[3] + bbox[1], bbox[2], bbox[3]))
 
                 if track.hits >= 6:
                     total += 1
