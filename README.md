@@ -73,9 +73,8 @@ python counting_objects_runner.py
     --detection-weight detection/weights/yolov3.weights 
     --reid-weights re_id/logs/market-1501/PCB/checkpoint.pth.tar 
     -a resnet18
-    --confidence 0.4 
+    --confidence 0.5 
     --nms-thres 0.3 
-    --img-size 608  
-    --counting-use-reid 
+    --img-size 928  
     --inputs videos
 ```
