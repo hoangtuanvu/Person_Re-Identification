@@ -48,23 +48,30 @@ class LoadImages:  # for inference
 
         files = []
         if os.path.isdir(path):
-            files = sorted(glob.glob('%s/*.*' % path))
+            files = sorted(glob.glob('%s/*' % path))
         elif os.path.isfile(path):
             files = [path]
 
         images = [x for x in files if os.path.splitext(x)[-1].lower() in img_formats]
         videos = [x for x in files if os.path.splitext(x)[-1].lower() in vid_formats]
-        nI, nV = len(images), len(videos)
+        images_folder = [x for x in files if os.path.isdir(x)]
 
-        self.files = images + videos
-        self.nF = nI + nV  # number of files
-        self.video_flag = [False] * nI + [True] * nV
-        self.mode = 'images'
+        nI, nV, nIF = len(images), len(videos), len(images_folder)
+
+        self.files = images + videos + images_folder
+        self.nF = nI + nV + nIF  # number of files
+        self.video_flag = [False] * nI + [True] * (nV + nIF)
+        self.mode = 'I'
         self.resize_mode = resize_mode
         if any(videos):
             self.new_video(videos[0])  # new video
+            self.mode = 'V'
         else:
-            self.cap = None
+            if any(images_folder):
+                self.new_video(images_folder[0], False)
+                self.mode = 'IF'
+            else:
+                self.cap = None
         assert self.nF > 0, 'No images or videos found in ' + path
 
     def __iter__(self):
@@ -78,22 +85,33 @@ class LoadImages:  # for inference
 
         if self.video_flag[self.count]:
             # Read video
-            self.mode = 'video'
-            ret_val, img0 = self.cap.read()
+            if self.mode == 'V':
+                ret_val, img0 = self.cap.read()
+            else:
+                ret_val = len(self.cap) > self.frame
+                if ret_val:
+                    img0 = cv2.imread(self.cap[self.frame])
+
             if not ret_val:
                 self.count += 1
-                self.cap.release()
+
+                if self.mode == 'V':
+                    self.cap.release()
+
                 if self.count == self.nF:  # last video
                     raise StopIteration
                 else:
                     path = self.files[self.count]
-                    self.new_video(path)
-                    ret_val, img0 = self.cap.read()
+                    if self.mode == 'V':
+                        self.new_video(path)
+                        ret_val, img0 = self.cap.read()
+                    else:
+                        self.new_video(path, False)
+                        img0 = cv2.imread(self.cap[self.frame])
 
             self.frame += 1
             self.path = path
             print('video %g/%g (%g/%g) %s: ' % (self.count + 1, self.nF, self.frame, self.nframes, path))
-
         else:
             # Read image
             self.count += 1
@@ -111,10 +129,15 @@ class LoadImages:  # for inference
 
         return path, img, img0
 
-    def new_video(self, path):
+    def new_video(self, path, video=True):
         self.frame = 0
-        self.cap = cv2.VideoCapture(path)
-        self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if video:
+            self.cap = cv2.VideoCapture(path)
+            self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        else:
+            paths = glob.glob('%s/*.*' % path)
+            self.cap = paths
+            self.nframes = len(paths)
 
     def __len__(self):
         return self.nF  # number of files
