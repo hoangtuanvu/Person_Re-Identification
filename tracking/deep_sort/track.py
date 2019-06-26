@@ -63,8 +63,7 @@ class Track:
 
     """
 
-    def __init__(self, mean, covariance, track_id, n_init, max_age,
-                 feature=None, prev_img=None, init_bbox=None):
+    def __init__(self, mean, covariance, track_id, n_init, max_age, feature=None, init_bbox=None):
         self.mean = mean
         self.covariance = covariance
         self.track_id = track_id
@@ -79,7 +78,6 @@ class Track:
 
         self._n_init = n_init
         self._max_age = max_age
-        self.prev_img = prev_img
         self.init_bbox = init_bbox
 
     def to_tlwh(self):
@@ -125,7 +123,7 @@ class Track:
         self.age += 1
         self.time_since_update += 1
 
-    def update(self, kf, detection, prev_img=None):
+    def update(self, kf, detection):
         """Perform Kalman filter measurement update step and update the feature
         cache.
 
@@ -135,7 +133,6 @@ class Track:
             The Kalman filter.
         detection : Detection
             The associated detection.
-        prev_img: previous image for the detection box. It's used for counting person.
         """
         self.mean, self.covariance = kf.update(
             self.mean, self.covariance, detection.to_xyah())
@@ -145,7 +142,6 @@ class Track:
         self.time_since_update = 0
         if self.state == TrackState.Tentative and self.hits >= self._n_init:
             self.state = TrackState.Confirmed
-        self.prev_img = prev_img
 
     def mark_missed(self):
         """Mark this track as missed (no association at the current time step).

@@ -12,9 +12,7 @@ from tracking.deep_sort.tracker import Tracker
 from detection.model.yolov3 import Darknet
 from detection.utils.commons import non_max_suppression
 from detection.utils.visualization import gen_colors
-from re_id.reid import models
 from re_id.reid.utils.data.iotools import mkdir_if_missing
-from re_id.reid.utils.serialization import load_checkpoint
 from utilities import boxes_filtering
 from utilities import read_counting_gt
 from utilities import convert_number_to_image_form
@@ -28,9 +26,7 @@ line = cv2.LINE_AA
 class PersonHandler:
     def __init__(self, args, encoder=None, cls_out=None, metric=None, coordinates_out=None):
         # Tracking Variables
-        self.matching_threshold = args.matching_threshold
         self.encoder = encoder
-        self.tracking_type = args.tracking_type
         self.tracker = None
         self.cls_out = cls_out
         self.other_trackers = {}
@@ -42,20 +38,13 @@ class PersonHandler:
         self.img_size = args.img_size
         self.resize_mode = args.mode
 
-        # Re-ID Variables
-        self.counting_use_reid = args.counting_use_reid
-
         if len(args.config_path) == 0 or len(args.detection_weight) == 0:
             raise ValueError('Detection model weight does not exist!')
-
-        if len(args.reid_weights) == 0:
-            raise ValueError('Person ReID model weight does not exist!')
 
         self.use_gpu = torch.cuda.is_available()
         if args.use_cpu:
             self.use_gpu = False
 
-        self.Tensor = torch.cuda.FloatTensor if self.use_gpu else torch.FloatTensor
         self.device = torch.device('cuda' if self.use_gpu else 'cpu')
         self.use_resize = args.use_resize
         self.out = None
@@ -80,18 +69,6 @@ class PersonHandler:
         self.detect_model = nn.DataParallel(detect_model).cuda() if self.use_gpu else detect_model
         self.detect_model.eval()
         cudnn.benchmark = True
-
-        # Load model Person Re-identification
-        print('Loading Re-ID model')
-        if args.arch.startswith('resnet'):
-            reid_model = models.create(args.arch, num_features=256,
-                                       dropout=args.dropout, num_classes=args.num_classes, cut_at_pooling=False,
-                                       FCN=True)
-        else:
-            reid_model = models.create(args.arch, num_classes=args.num_classes, use_gpu=self.use_gpu)
-
-        load_checkpoint(reid_model, args.reid_weights)
-        self.reid_model = nn.DataParallel(reid_model).cuda() if self.use_gpu else reid_model
 
     def online_process(self, loader):
         """Loop, grab images from camera, and do count number of objects in Online mode."""
@@ -202,10 +179,7 @@ class PersonHandler:
                 detections = [detections[i] for i in indices]
 
                 self.tracker.predict()
-                if self.counting_use_reid:
-                    self.tracker.update(detections, self.reid_model, raw_img, self.matching_threshold)
-                else:
-                    self.tracker.update(detections)
+                self.tracker.update(detections)
 
                 for track in self.tracker.tracks:
                     bbox = track.to_tlbr().astype(int)

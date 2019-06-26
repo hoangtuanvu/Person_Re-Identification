@@ -110,8 +110,6 @@ def parse_args():
     # ******************************************************************************************************************
     # Counting
     # ******************************************************************************************************************
-    parser.add_argument('--counting-use-reid', dest='counting_use_reid',
-                        action='store_true', help='use person re-identification for counting person')
     parser.add_argument('--save-dir', dest='save_dir',
                         default='.', type=str)
     parser.add_argument('--is-saved', dest='is_saved',
