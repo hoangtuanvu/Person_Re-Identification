@@ -135,7 +135,7 @@ class LoadImages:  # for inference
             self.cap = cv2.VideoCapture(path)
             self.nframes = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
         else:
-            paths = glob.glob('%s/*.*' % path)
+            paths = sorted(glob.glob('%s/*.*' % path))
             self.cap = paths
             self.nframes = len(paths)
 
