@@ -4,11 +4,12 @@ from detection.utils.commons import load_cls_dict
 from detection.utils.datasets import LoadImages
 from counting_objects_handler import PersonHandler
 from processor.utilities import load_cls_out
-from args import parse_args
 from re_id.reid.utils.data.iotools import mkdir_if_missing
 
+from opts import opts
+
 print('Load Input Arguments')
-args = parse_args()
+args = opts().init()
 
 print('Load Tracker ...')
 encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)
@@ -26,8 +27,8 @@ if args.save_coordinates:
 print('Load Object Detection model ...')
 person_handler = PersonHandler(args, encoder=encoder, cls_out=cls_out, metric=metric, coordinates_out=coordinates_out)
 if args.is_saved:
-    mkdir_if_missing(args.save_dir)
-    person_handler.set_saved_dir(args.save_dir)
+    mkdir_if_missing(args.save_vid)
+    person_handler.set_saved_dir(args.save_vid)
 
 if args.save_tracks:
     mkdir_if_missing(args.track_dir)
@@ -39,5 +40,5 @@ person_handler.init_tracker()
 person_handler.init_other_trackers()
 
 print('Process Videos in Offline Mode')
-loader = LoadImages(args.inputs, img_size=args.img_size, resize_mode=args.mode)
+loader = LoadImages(args.inputs, img_size=args.img_size, resize_mode=args.mode, od_model=args.od_model)
 person_handler.offline_process(loader)

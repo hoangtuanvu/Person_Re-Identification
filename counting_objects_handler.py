@@ -1,3 +1,8 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import _init_paths
 import os
 import cv2
 import numpy as np
@@ -19,6 +24,9 @@ from processor.post_process import boxes_filtering
 from processor.post_process import gen_report
 from processor.post_process import save_probe_dir
 from processor.post_process import gen_total_objects
+from processor.post_process import ct_boxes_filer
+from detectors.detector_factory import detector_factory
+from utils.debugger import coco_class_name
 
 
 class PersonHandler:
@@ -28,7 +36,6 @@ class PersonHandler:
         # Tracking Variables
         self.encoder = encoder
         self.tracker = None
-        self.cls_out = cls_out
         self.other_trackers = {}
         self.metric = metric
 
@@ -57,17 +64,25 @@ class PersonHandler:
         self.image_width = args.image_width
         self.image_height = args.image_height
         self.save_probe = args.save_probe
+        self.od_model = args.od_model
 
         # Load model Detection
         print('Loading detection model ...')
-        detect_model = Darknet(args.config_path, img_size=self.img_size, device=self.device)
-        if args.detection_weight.endswith('.pt'):
-            detect_model.load_state_dict(torch.load(args.detection_weight, map_location=self.device)['model'])
-        else:
-            detect_model.load_darknet_weights(args.detection_weight)
+        if self.od_model == 'yolo':
+            detect_model = Darknet(args.config_path, img_size=self.img_size, device=self.device)
+            if args.detection_weight.endswith('.pt'):
+                detect_model.load_state_dict(torch.load(args.detection_weight, map_location=self.device)['model'])
+            else:
+                detect_model.load_darknet_weights(args.detection_weight)
 
-        self.detect_model = nn.DataParallel(detect_model).cuda() if self.use_gpu else detect_model
-        self.detect_model.eval()
+            self.detect_model = nn.DataParallel(detect_model).cuda() if self.use_gpu else detect_model
+            self.detect_model.eval()
+            self.cls_out = cls_out
+        else:
+            Detector = detector_factory[args.task]
+            self.detect_model = Detector(args)
+            self.cls_out = [cls_id for cls_id in range(len(coco_class_name) - 1)]
+
         cudnn.benchmark = True
 
     def online_process(self, loader):
@@ -107,7 +122,7 @@ class PersonHandler:
             display = np.array(img0)
             output = display.copy()
 
-            self.detect_n_counting(output, img, loader=loader)
+            self.detect_n_counting(output, img, loader=loader, out=out)
 
             if out is not None:
                 out.write(output)
@@ -118,8 +133,9 @@ class PersonHandler:
 
                 # the last frame on each video
                 object_cnt = {"name": os.path.basename(path).split('.')[0],
-                              "objects": gen_total_objects(self.cls_out, total_objects),
-                              "rms": rms(gt[loader.count]["objects"], gen_total_objects(self.cls_out, total_objects))}
+                              "objects": gen_total_objects(self.cls_out, total_objects, self.od_model),
+                              "rms": rms(gt[loader.count]["objects"],
+                                         gen_total_objects(self.cls_out, total_objects, self.od_model))}
                 object_cnt_all.append(object_cnt)
 
                 # clear total of objects of previous video
@@ -137,21 +153,28 @@ class PersonHandler:
 
         print('Time to process', time.time() - start_time)
 
-    def detect_n_counting(self, origimg, img, loader=None):
+    def detect_n_counting(self, origimg, img, loader=None, out=None):
         """Do object detection over 1 image."""
         input_imgs = torch.from_numpy(img).float().unsqueeze(0).to(self.device)
         raw_img = origimg.copy()
 
-        # Applies yolov3 detection
+        # Apply Object Detection models
         with torch.no_grad():
-            detections, _ = self.detect_model(input_imgs)
-            detections = non_max_suppression(detections, self.conf_th, self.nms_thres)[0]
+            if self.od_model == 'yolo':
+                detections, _ = self.detect_model(input_imgs)
+                detections = non_max_suppression(detections, self.conf_th, self.nms_thres)[0]
 
-        if detections is None:
-            return [], [], []
+                if detections is None:
+                    return self.null_values
 
-        box, conf, cls = boxes_filtering(raw_img, detections, self.img_size, cls_out=self.cls_out,
-                                         mode=self.resize_mode)
+                box, conf, cls = boxes_filtering(raw_img, detections, self.img_size, cls_out=self.cls_out,
+                                                 mode=self.resize_mode)
+            else:
+                detections = self.detect_model.run(img, loader.frame, vid_writer=out)
+                if not bool(detections):
+                    return self.null_values
+
+                box, conf, cls = ct_boxes_filer(detections['results'], self.cls_out, self.conf_th)
 
         if len(box) == 0:
             return self.null_values

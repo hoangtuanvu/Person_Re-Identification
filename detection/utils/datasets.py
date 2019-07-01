@@ -26,22 +26,14 @@ class LoadCamera:  # for inference
         ret_val, img0 = self.cam.read()
         assert ret_val, 'Webcam Error'
 
-        # Padded resize
-        img, _, _, _ = letterbox(img0, self.height, mode=self.resize_mode)
-
-        # Normalize RGB
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
-        img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-
-        return None, img, img0
+        return None, pre_process(img0, self.height, self.resize_mode), img0
 
     def __len__(self):
         return 0
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=416, resize_mode='square'):
+    def __init__(self, path, img_size=416, resize_mode='square', od_model='yolo'):
         self.height = img_size
         img_formats = ['.jpg', '.jpeg', '.png', '.tif']
         vid_formats = ['.mov', '.avi', '.mp4']
@@ -63,6 +55,7 @@ class LoadImages:  # for inference
         self.video_flag = [False] * nI + [True] * (nV + nIF)
         self.mode = 'I'
         self.resize_mode = resize_mode
+        self.od_model = od_model
         if any(videos):
             self.new_video(videos[0])  # new video
             self.mode = 'V'
@@ -81,6 +74,7 @@ class LoadImages:  # for inference
     def __next__(self):
         if self.count == self.nF:
             raise StopIteration
+
         path = self.files[self.count]
 
         if self.video_flag[self.count]:
@@ -119,13 +113,10 @@ class LoadImages:  # for inference
             assert img0 is not None, 'File Not Found ' + path
             print('image %g/%g %s: ' % (self.count, self.nF, path))
 
-        # Padded resize
-        img, _, _, _ = letterbox(img0, self.height, mode=self.resize_mode)
-
-        # Normalize RGB
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
-        img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
+        if self.od_model == 'yolo':
+            img = pre_process(img0, self.height, self.resize_mode)
+        else:
+            img = img0.copy()
 
         return path, img, img0
 
@@ -342,3 +333,15 @@ def letterbox(img, new_shape=416, color=(127.5, 127.5, 127.5), mode='auto'):
     img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)  # resized, no border
     img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)  # padded square
     return img, ratio, dw, dh
+
+
+def pre_process(img0, size, resize_mode):
+    """Pre-Process input images for yolo detection model"""
+    # Padded resize
+    img, _, _, _ = letterbox(img0, size, mode=resize_mode)
+
+    # Normalize RGB
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
+    img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
+    img /= 255.0  # 0 - 255 to 0.0 - 1.0
+    return img

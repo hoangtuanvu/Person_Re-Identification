@@ -26,6 +26,13 @@ After that, move the weight to the weight directory of detection module
 mv [yolov3-spp/yolov3-tiny/yolov3].weights detection/weights
 ```
 
+Download Centernet Version from the following link
+https://drive.google.com/open?id=1uiH-SVLqVKEs3AlmBaFFDES5bMD4Jv_F
+And then, move the weight to the weight directory of detection module
+```
+mv model_last_X.pth centernet/models/
+```
+
 Download person re-identification from the following link
 https://drive.google.com/open?id=1pXNYlCYMSVq_bRvuOqGVBv3-dPgWFjS0
 
@@ -72,14 +79,26 @@ python counting_app.py
 ```
 
 ## Run Person-Counting by Offline mode
+Run with yolov3
 ```
 python counting_objects_runner.py 
     --config-path detection/config/yolov3.cfg 
-    --detection-weight detection/weights/yolov3.weights 
-    --reid-weights re_id/logs/market-1501/PCB/checkpoint.pth.tar 
+    --detection-weight detection/weights/yolov3.weights
     -a resnet18
     --confidence 0.5 
     --nms-thres 0.3 
     --img-size 928  
-    --inputs videos
+    --inputs [path_to_image_folder]
+```
+
+Run with CenterNet
+```
+python counting_objects_runner.py 
+    --confidence 0.4 
+    --nms-thres 0.3
+    --od-model centernet 
+    --load_model [path_to_centernet_ckpt]   
+    --inputs [path_to_image_folder]
+    --nms
+    --keep_res #Optional
 ```

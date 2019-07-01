@@ -30,24 +30,26 @@ def save_probe_dir(video_id, track_id, raw_img, bbox):
                 obj_img)
 
 
-def ct_boxes_filer(dets, cls_out):
+def ct_boxes_filer(dets, cls_out, conf_th):
     out_box = []
     out_conf = []
     out_cls = []
 
     for cls_id in dets:
         for x1, y1, x2, y2, conf in dets[cls_id]:
-            if conf < 0.3:
+            if conf < conf_th:
                 continue
 
             if (cls_id - 1) in cls_out and len(dets[cls_id]) > 0:
                 w = x2 - x1
                 h = y2 - y1
 
+                # Class 0 (pedestrian)
                 if cls_id - 1 == 0 and min(w, h) <= 10:
                     continue
 
-                if cls_id - 1 in [2, 5, 7] and min(w, h) < 30:
+                # Class Vehicle (Car, Truck, Bus)
+                if cls_id - 1 in [1, 4, 5] and min(w, h) < 30:
                     continue
 
                 box = [int(x1), int(y1), int(w), int(h)]
@@ -78,7 +80,7 @@ def gen_report(gt, pred):
     book.save("statistics.xls")
 
 
-def gen_total_objects(cls_out, total_objects):
+def gen_total_objects(cls_out, total_objects, od_model):
     """Generate total number of objects of each output class"""
     res = []
 
@@ -88,16 +90,34 @@ def gen_total_objects(cls_out, total_objects):
 
     # for Person
     res.append(total_objects[0])
+
     # for Fire extinguisher
     res.append(0)
-    # for Fire hydrant
-    res.append(total_objects[10])
-    # for Vehicles
-    res.append(total_objects[2] + total_objects[5] + total_objects[7])
-    # for bicycle
-    res.append(total_objects[1])
-    # for motorbike
-    res.append(total_objects[3])
+
+    if od_model == 'yolo':
+        # for Fire hydrant
+        res.append(total_objects[10])
+
+        # for Vehicles
+        res.append(total_objects[2] + total_objects[5] + total_objects[7])
+
+        # for bicycle
+        res.append(total_objects[1])
+
+        # for motorbike
+        res.append(total_objects[3])
+    else:
+        # for Fire hydrant
+        res.append(0)
+
+        # for Vehicles
+        res.append(total_objects[1] + total_objects[4] + total_objects[5])
+
+        # for bicycle
+        res.append(total_objects[3])
+
+        # for motorbike
+        res.append(total_objects[2])
 
     return res
 
