@@ -4,11 +4,11 @@ import uuid
 import numpy as np
 import torch
 import torch.nn as nn
-from utilities import matching
-from utilities import img_transform
-from utilities import draw_help_and_fps
-from utilities import boxes_filtering
-from utilities import visualize_box
+from processor.utilities import matching
+from processor.utilities import img_transform
+from processor.utilities import draw_help_and_fps
+from processor.post_process import boxes_filtering
+from processor.utilities import visualize_box
 from torch.backends import cudnn
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection

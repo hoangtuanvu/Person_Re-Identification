@@ -3,7 +3,7 @@ from tracking.tools import generate_detections as gdet
 from detection.utils.commons import load_cls_dict
 from detection.utils.datasets import LoadImages
 from counting_objects_handler import PersonHandler
-from utilities import load_cls_out
+from processor.utilities import load_cls_out
 from args import parse_args
 from re_id.reid.utils.data.iotools import mkdir_if_missing
 

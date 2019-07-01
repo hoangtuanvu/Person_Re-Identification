@@ -4,7 +4,7 @@ from tracking.tools import generate_detections as gdet
 from detection.utils.datasets import LoadCamera
 from detection.utils.commons import load_cls_dict
 from counting_objects_handler import PersonHandler
-from utilities import load_cls_out
+from processor.utilities import load_cls_out
 from args import parse_args
 import cv2
 import os

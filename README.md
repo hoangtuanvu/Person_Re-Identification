@@ -45,10 +45,15 @@ python person_app.py
 ```
 
 ## Convert Images to Videos
+Note: This is optional
 ```
-python preprocessing.py 
+python processor/pre_process.py 
     --images-dir [image_directory_that_contains_folder_of_image_frames]
     --output-dir [output_directory_that_contain_videos_outputs]
+    --f 10 #frame_rate
+    --c libx264 #encode type
+    --img-ext jpg #image extension
+    --vid-ext mp4 #video extension
 ```
 
 ## Run Person-Counting App

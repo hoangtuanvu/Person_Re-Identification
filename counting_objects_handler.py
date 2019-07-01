@@ -12,18 +12,18 @@ from tracking.deep_sort.tracker import Tracker
 from detection.model.yolov3 import Darknet
 from detection.utils.commons import non_max_suppression
 from detection.utils.visualization import gen_colors
-from re_id.reid.utils.data.iotools import mkdir_if_missing
-from utilities import boxes_filtering
-from utilities import read_counting_gt
-from utilities import convert_number_to_image_form
-from utilities import rms
-from utilities import gen_report
-
-font = cv2.FONT_HERSHEY_PLAIN
-line = cv2.LINE_AA
+from processor.utilities import read_counting_gt
+from processor.utilities import convert_number_to_image_form
+from processor.utilities import rms
+from processor.post_process import boxes_filtering
+from processor.post_process import gen_report
+from processor.post_process import save_probe_dir
+from processor.post_process import gen_total_objects
 
 
 class PersonHandler:
+    null_values = [], [], []
+
     def __init__(self, args, encoder=None, cls_out=None, metric=None, coordinates_out=None):
         # Tracking Variables
         self.encoder = encoder
@@ -100,7 +100,6 @@ class PersonHandler:
 
         out = None
         for i, (path, img, img0) in enumerate(loader):
-
             if self.saved_dir is not None and out is None:
                 out = cv2.VideoWriter('{}/{}.avi'.format(self.saved_dir, os.path.basename(path).split('.')[0]),
                                       cv2.VideoWriter_fourcc(*'XVID'), 10, (self.image_width, self.image_height), True)
@@ -119,8 +118,8 @@ class PersonHandler:
 
                 # the last frame on each video
                 object_cnt = {"name": os.path.basename(path).split('.')[0],
-                              "objects": self.gen_total_objects(total_objects),
-                              "rms": rms(gt[loader.count]["objects"], self.gen_total_objects(total_objects))}
+                              "objects": gen_total_objects(self.cls_out, total_objects),
+                              "rms": rms(gt[loader.count]["objects"], gen_total_objects(self.cls_out, total_objects))}
                 object_cnt_all.append(object_cnt)
 
                 # clear total of objects of previous video
@@ -155,7 +154,7 @@ class PersonHandler:
                                          mode=self.resize_mode)
 
         if len(box) == 0:
-            return [], [], []
+            return self.null_values
 
         cls_out_dict = {}
         for i in range(len(box)):
@@ -185,8 +184,9 @@ class PersonHandler:
                     bbox = track.to_tlbr().astype(int)
 
                     # save tracked list
-                    self.save_probe_dir(video_id=os.path.basename(loader.path).split('.')[0][1:],
-                                        track_id=track.track_id, raw_img=raw_img, bbox=bbox)
+                    if self.save_probe:
+                        save_probe_dir(video_id=os.path.basename(loader.path).split('.')[0][1:],
+                                       track_id=track.track_id, raw_img=raw_img, bbox=bbox)
 
                     if not track.is_confirmed() or track.time_since_update > 1:
                         continue
@@ -290,49 +290,3 @@ class PersonHandler:
                     total += 1
 
             total_objects[0] = total
-
-    def gen_total_objects(self, total_objects):
-        """Generate total number of objects of each output class"""
-        res = []
-
-        for cls in self.cls_out:
-            if cls not in total_objects:
-                total_objects[cls] = 0
-
-        # for Person
-        res.append(total_objects[0])
-        # for Fire extinguisher
-        res.append(0)
-        # for Fire hydrant
-        res.append(total_objects[10])
-        # for Vehicles
-        res.append(total_objects[2] + total_objects[5] + total_objects[7])
-        # for bicycle
-        res.append(total_objects[1])
-        # for motorbike
-        res.append(total_objects[3])
-
-        return res
-
-    def save_probe_dir(self, video_id, track_id, raw_img, bbox):
-        """ save query images in probe directory"""
-        if self.save_probe:
-            new_track_id = convert_number_to_image_form(int(track_id), start_digit='2', max_length=3)
-            dir = 'tracking_images/{}/{}'.format(video_id, new_track_id)
-
-            # create folder if not exist
-            mkdir_if_missing(dir)
-
-            # write images
-            obj_img = raw_img[bbox[1]: bbox[3], bbox[0]: bbox[2], :]
-            h, w, _ = obj_img.shape
-
-            if h == 0 or w == 0:
-                return
-
-            obj_img = cv2.resize(obj_img, (128, 256), interpolation=cv2.INTER_LINEAR)
-
-            cur_idx = len(os.listdir(dir))
-            cv2.imwrite('{}/{}C1T{}F{}.jpg'.format(dir, new_track_id, new_track_id,
-                                                   convert_number_to_image_form(cur_idx, start_digit='', max_length=3)),
-                        obj_img)
