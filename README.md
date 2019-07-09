@@ -18,12 +18,10 @@ pip3 install -r requirements.txt
 ```
 
 ## Download weights for object detection and person re-identification
-Download yolov3, yolov3-tiny from the following link
-https://drive.google.com/open?id=1y8I_6Vu9H5KCaNcAHW3tvvkoktYz1U5U
-
-After that, move the weight to the weight directory of detection module
+Download yolov3, yolov3-tiny by running the following script
 ```
-mv [yolov3-spp/yolov3-tiny/yolov3].weights detection/weights
+cd detection/weights
+./download_weights.sh
 ```
 
 Download Centernet Version from the following link
