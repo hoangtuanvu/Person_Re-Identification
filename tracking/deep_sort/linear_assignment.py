@@ -10,7 +10,7 @@ INFTY_COST = 1e+5
 
 def min_cost_matching(
         distance_metric, max_distance, tracks, detections, track_indices=None,
-        detection_indices=None):
+        detection_indices=None, shake_camera=False):
     """Solve linear assignment problem.
 
     Parameters
@@ -53,7 +53,7 @@ def min_cost_matching(
         return [], track_indices, detection_indices  # Nothing to match.
 
     cost_matrix = distance_metric(
-        tracks, detections, track_indices, detection_indices)
+        tracks, detections, track_indices, detection_indices, shake_camera)
     cost_matrix[cost_matrix > max_distance] = max_distance + 1e-5
     indices = linear_assignment(cost_matrix)
 
@@ -77,7 +77,7 @@ def min_cost_matching(
 
 def matching_cascade(
         distance_metric, max_distance, cascade_depth, tracks, detections,
-        track_indices=None, detection_indices=None):
+        track_indices=None, detection_indices=None, shake_camera=False):
     """Run matching cascade.
 
     Parameters
@@ -135,7 +135,7 @@ def matching_cascade(
         matches_l, _, unmatched_detections = \
             min_cost_matching(
                 distance_metric, max_distance, tracks, detections,
-                track_indices_l, unmatched_detections)
+                track_indices_l, unmatched_detections, shake_camera=shake_camera)
         matches += matches_l
     unmatched_tracks = list(set(track_indices) - set(k for k, _ in matches))
     return matches, unmatched_tracks, unmatched_detections

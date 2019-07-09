@@ -36,7 +36,7 @@ class PersonHandler:
         # Tracking Variables
         self.encoder = encoder
         self.tracker = None
-        self.other_trackers = {}
+        self.other_trackers = dict()
         self.metric = metric
 
         # Detection Variables
@@ -55,7 +55,7 @@ class PersonHandler:
         self.device = torch.device('cuda' if self.use_gpu else 'cpu')
         self.use_resize = args.use_resize
         self.out = None
-        self.colors = {}
+        self.colors = dict()
         self.output_name = args.output_name
         self.gt = args.gt
         self.coordinates_out = coordinates_out
@@ -65,6 +65,11 @@ class PersonHandler:
         self.image_height = args.image_height
         self.save_probe = args.save_probe
         self.od_model = args.od_model
+        self.min_shake_point = args.min_shake_point
+        self.stable_point = args.stable_point
+        self.shake_camera = False
+        self.prev_bboxes = -1
+        self.cons_frames = list()
 
         # Load model Detection
         print('Loading detection model ...')
@@ -176,6 +181,19 @@ class PersonHandler:
 
                 box, conf, cls = ct_boxes_filer(detections['results'], self.cls_out, self.conf_th)
 
+            # Identify shake point
+            if loader.frame > 0:
+                if abs(len(box) - self.prev_bboxes) >= self.min_shake_point:
+                    self.shake_camera = True
+                    self.cons_frames.clear()
+                else:
+                    self.cons_frames.append(True)
+
+            if len(self.cons_frames) >= self.stable_point:
+                self.shake_camera = False
+
+            self.prev_bboxes = len(box)
+
         if len(box) == 0:
             return self.null_values
 
@@ -201,7 +219,7 @@ class PersonHandler:
                 detections = [detections[i] for i in indices]
 
                 self.tracker.predict()
-                self.tracker.update(detections)
+                self.tracker.update(detections, self.shake_camera)
 
                 for track in self.tracker.tracks:
                     bbox = track.to_tlbr().astype(int)
@@ -309,7 +327,7 @@ class PersonHandler:
                     f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
                         0, track, bbox[0], bbox[1], bbox[2] + bbox[0], bbox[3] + bbox[1], bbox[2], bbox[3]))
 
-                if track.hits >= 6:
+                if track.hits >= 5:
                     total += 1
 
             total_objects[0] = total

@@ -40,7 +40,7 @@ def iou(bbox, candidates):
 
 
 def iou_cost(tracks, detections, track_indices=None,
-             detection_indices=None):
+             detection_indices=None, shake_camera=False):
     """An intersection over union distance metric.
 
     Parameters

@@ -171,3 +171,9 @@ class Track:
                 tmp_dict[key] = self.__dict__[key]
 
         return ', '.join(['{key}={value}'.format(key=key, value=self.__dict__.get(key)) for key in tmp_dict])
+
+    def set_mean(self, mean):
+        self.mean = mean
+
+    def set_covariance(self, covariance):
+        self.covariance = covariance

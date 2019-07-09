@@ -55,7 +55,7 @@ class Tracker:
         for track in self.tracks:
             track.predict(self.kf)
 
-    def update(self, detections):
+    def update(self, detections, shake_camera=False):
         """Perform measurement update and track management.
 
         Parameters
@@ -64,11 +64,16 @@ class Tracker:
             A list of detections at the current time step.
         """
         # Run matching cascade.
-        matches, unmatched_tracks, unmatched_detections = self._match(detections)
+        matches, unmatched_tracks, unmatched_detections = self._match(detections, shake_camera)
 
         # Update track set.
         for track_idx, detection_idx in matches:
-            self.tracks[track_idx].update(self.kf, detections[detection_idx])
+            if not shake_camera:
+                self.tracks[track_idx].update(self.kf, detections[detection_idx])
+            else:
+                mean, covariance = self.kf.initiate(detections[detection_idx].to_xyah())
+                self.tracks[track_idx].set_mean(mean)
+                self.tracks[track_idx].set_covariance(covariance)
 
         for track_idx in unmatched_tracks:
             self.tracks[track_idx].mark_missed()
@@ -89,15 +94,16 @@ class Tracker:
         self.metric.partial_fit(
             np.asarray(features), np.asarray(targets), active_targets)
 
-    def _match(self, detections):
+    def _match(self, detections, shake_camera):
 
-        def gated_metric(tracks, dets, track_indices, detection_indices):
+        def gated_metric(tracks, dets, track_indices, detection_indices, shake_camera):
             features = np.array([dets[i].feature for i in detection_indices])
             targets = np.array([tracks[i].track_id for i in track_indices])
             cost_matrix = self.metric.distance(features, targets)
-            cost_matrix = linear_assignment.gate_cost_matrix(
-                self.kf, cost_matrix, tracks, dets, track_indices,
-                detection_indices)
+            if not shake_camera:
+                cost_matrix = linear_assignment.gate_cost_matrix(
+                    self.kf, cost_matrix, tracks, dets, track_indices,
+                    detection_indices)
 
             return cost_matrix
 
@@ -111,7 +117,7 @@ class Tracker:
         matches_a, unmatched_tracks_a, unmatched_detections = \
             linear_assignment.matching_cascade(
                 gated_metric, self.metric.matching_threshold, self.max_age,
-                self.tracks, detections, confirmed_tracks)
+                self.tracks, detections, confirmed_tracks, shake_camera=shake_camera)
 
         # Associate remaining tracks together with unconfirmed tracks using IOU.
         iou_track_candidates = unconfirmed_tracks + [
@@ -123,7 +129,7 @@ class Tracker:
         matches_b, unmatched_tracks_b, unmatched_detections = \
             linear_assignment.min_cost_matching(
                 iou_matching.iou_cost, self.max_iou_distance, self.tracks,
-                detections, iou_track_candidates, unmatched_detections)
+                detections, iou_track_candidates, unmatched_detections, shake_camera=shake_camera)
 
         matches = matches_a + matches_b
         unmatched_tracks = list(set(unmatched_tracks_a + unmatched_tracks_b))

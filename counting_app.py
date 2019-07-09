@@ -6,6 +6,7 @@ from detection.utils.commons import load_cls_dict
 from counting_objects_handler import PersonHandler
 from processor.utilities import load_cls_out
 from args import parse_args
+from opts import opts
 import cv2
 import os
 from re_id.reid.utils.data.iotools import mkdir_if_missing
@@ -63,7 +64,7 @@ def home():
 
 
 print('Load Input Arguments')
-args = parse_args()
+args = opts().init()
 
 print('Load Tracker ...')
 encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)

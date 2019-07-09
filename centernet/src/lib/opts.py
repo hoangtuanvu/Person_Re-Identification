@@ -419,6 +419,12 @@ class opts(object):
                             action='store_true', help='allow to save object tracks')
         parser.add_argument('--od-model', default='yolo', choices=['yolo', 'centernet'],
                             type=str, help='Object Detection model')
+        parser.add_argument('--min-shake-point', dest='min_shake_point',
+                            type=int, default=4,
+                            help='Difference between number of previous objects and current objects')
+        parser.add_argument('--stable-point', dest='stable_point',
+                            type=int, default=5,
+                            help='Number of consecutive frame that does not happen shake event')
         # ******************************************************************************************************************
         # Detection
         # ******************************************************************************************************************
