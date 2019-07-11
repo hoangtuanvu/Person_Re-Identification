@@ -88,7 +88,7 @@ python counting_objects_runner.py
     --img-size 928  
     --inputs [path_to_image_folder]
     --min-shake-point 4 
-    --stable-point 5
+    --stable-point 10
 ```
 
 Run with CenterNet
@@ -102,5 +102,5 @@ python counting_objects_runner.py
     --nms
     --keep_res #Optional
     --min-shake-point 4 
-    --stable-point 5
+    --stable-point 10
 ```

@@ -454,7 +454,7 @@ class opts(object):
         # ******************************************************************************************************************
         # Tracking
         # ******************************************************************************************************************
-        parser.add_argument('--tracker-path', dest='tracker_weights',
+        parser.add_argument('--p-tracker-path', dest='p_tracker_weights',
                             help='[{}]'.format('tracking/model_data/mars-small128.pb'),
                             default='tracking/model_data/mars-small128.pb', type=str)
         parser.add_argument('--tracking-type', dest='tracking_type',
@@ -463,6 +463,9 @@ class opts(object):
         parser.add_argument('--max-cosine-distance', dest='max_cosine_distance',
                             help='maximun cosine distance [0.3]',
                             default=0.3, type=float)
+        parser.add_argument('--v-tracker-path', dest='v_tracker_weights',
+                            help='[{}]'.format('tracking/model_data/veri.pb'),
+                            default='tracking/model_data/veri.pb', type=str)
         # ******************************************************************************************************************
         # Re-Identification
         # ******************************************************************************************************************

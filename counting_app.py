@@ -1,5 +1,4 @@
 from flask import Flask, render_template, Response, request, flash, redirect
-from tracking.deep_sort import nn_matching
 from tracking.tools import generate_detections as gdet
 from detection.utils.datasets import LoadCamera
 from detection.utils.commons import load_cls_dict
@@ -66,16 +65,20 @@ def home():
 print('Load Input Arguments')
 args = opts().init()
 
-print('Load Tracker ...')
-encoder = gdet.create_box_encoder(model_filename=args.tracker_weights, batch_size=8)
-metric = nn_matching.NearestNeighborDistanceMetric("cosine", args.max_cosine_distance)
+print('Load Person Appearance ...')
+print(args.p_tracker_weights)
+p_encoder = gdet.create_box_encoder(model_filename=args.p_tracker_weights, batch_size=8)
+
+print('Load Vehicle Appearance ...')
+print(args.v_tracker_weights)
+v_encoder = gdet.create_box_encoder(model_filename=args.v_tracker_weights, batch_size=8)
 
 print('Load Label Map')
 cls_dict = load_cls_dict(args.data_path)
 cls_out = load_cls_out(args.cls_out, cls_dict)
 
 print('Load Object Detection model ...')
-person_handler = PersonHandler(args, encoder=encoder, cls_out=cls_out, metric=metric)
+person_handler = PersonHandler(args, p_encoder=p_encoder, v_encoder=v_encoder, cls_out=cls_out)
 person_handler.set_colors()
 
 
@@ -94,7 +97,6 @@ def video_feed():
 
     person_handler.set_out(out)
     person_handler.init_tracker()
-    person_handler.init_other_trackers()
 
     return Response(person_handler.online_process(loader),
                     mimetype='multipart/x-mixed-replace; boundary=frame')

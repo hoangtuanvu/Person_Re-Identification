@@ -14,6 +14,7 @@ from tracking.sort.sort import Sort
 from tracking.deep_sort import preprocessing
 from tracking.deep_sort.detection import Detection
 from tracking.deep_sort.tracker import Tracker
+from tracking.deep_sort import nn_matching
 from detection.model.yolov3 import Darknet
 from detection.utils.commons import non_max_suppression
 from detection.utils.visualization import gen_colors
@@ -32,12 +33,12 @@ from utils.debugger import coco_class_name
 class PersonHandler:
     null_values = [], [], []
 
-    def __init__(self, args, encoder=None, cls_out=None, metric=None, coordinates_out=None):
+    def __init__(self, args, p_encoder=None, v_encoder=None, cls_out=None, coordinates_out=None):
         # Tracking Variables
-        self.encoder = encoder
-        self.tracker = None
+        self.p_encoder = p_encoder
+        self.v_encoder = v_encoder
+        self.tracker = dict()
         self.other_trackers = dict()
-        self.metric = metric
 
         # Detection Variables
         self.conf_th = args.conf_th
@@ -70,6 +71,7 @@ class PersonHandler:
         self.shake_camera = False
         self.prev_bboxes = -1
         self.cons_frames = list()
+        self.max_cosine_distance = args.max_cosine_distance
 
         # Load model Detection
         print('Loading detection model ...')
@@ -151,7 +153,7 @@ class PersonHandler:
 
                 # Reset trackers
                 self.init_tracker()
-                self.init_other_trackers()
+                # self.init_other_trackers()
 
         # Generate Report
         gen_report(gt, object_cnt_all)
@@ -182,7 +184,7 @@ class PersonHandler:
                 box, conf, cls = ct_boxes_filer(detections['results'], self.cls_out, self.conf_th)
 
             # Identify shake point
-            if loader.frame > 0:
+            if loader.frame > 1:
                 if abs(len(box) - self.prev_bboxes) >= self.min_shake_point:
                     self.shake_camera = True
                     self.cons_frames.clear()
@@ -209,19 +211,23 @@ class PersonHandler:
             cls_boxes = cls_out_dict[cls][0]
             cls_conf = cls_out_dict[cls][1]
 
-            if cls == 0:
-                # person counting
-                features = self.encoder(raw_img, cls_boxes)
+            if cls in self.tracker:
+                # People and Vehicle Tracking
+                if cls == 0:
+                    features = self.p_encoder(raw_img, cls_boxes)
+                else:
+                    features = self.v_encoder(raw_img, cls_boxes)
+
                 detections = [Detection(bbox, 1.0, feature) for bbox, feature in zip(cls_boxes, features)]
                 boxes = np.array([d.tlwh for d in detections])
                 scores = np.array([d.confidence for d in detections])
                 indices = preprocessing.non_max_suppression(boxes, 1.0, scores)
                 detections = [detections[i] for i in indices]
 
-                self.tracker.predict()
-                self.tracker.update(detections, self.shake_camera)
+                self.tracker[cls].predict()
+                self.tracker[cls].update(detections, self.shake_camera)
 
-                for track in self.tracker.tracks:
+                for track in self.tracker[cls].tracks:
                     bbox = track.to_tlbr().astype(int)
 
                     # save tracked list
@@ -239,7 +245,7 @@ class PersonHandler:
                     self.write_coordinates(loader=loader, x=bbox[0], y=bbox[1], w=bbox[2] - bbox[0],
                                            h=bbox[3] - bbox[1], cls=cls, track_id=track.track_id)
             else:
-                # other objects counting
+                # Other objects Tracking
                 dets = []
                 for i in range(len(cls_boxes)):
                     x, y, w, h = cls_boxes[i]
@@ -271,12 +277,19 @@ class PersonHandler:
         self.track_dir = track_dir
 
     def init_tracker(self):
-        self.tracker = Tracker(self.metric)
-
-    def init_other_trackers(self):
         for cls in self.cls_out:
-            if cls != 0:
-                self.other_trackers[cls] = Sort(max_age=300)
+            if self.od_model == 'yolo':
+                if cls in [0, 2, 5, 7]:
+                    self.tracker[cls] = Tracker(
+                        nn_matching.NearestNeighborDistanceMetric("cosine", self.max_cosine_distance))
+                else:
+                    self.other_trackers[cls] = Sort(max_age=300)
+            else:
+                if cls in [0, 1, 4, 5]:
+                    self.tracker[cls] = Tracker(
+                        nn_matching.NearestNeighborDistanceMetric("cosine", self.max_cosine_distance))
+                else:
+                    self.other_trackers[cls] = Sort(max_age=300)
 
     def set_colors(self):
         colors = gen_colors(len(self.cls_out))
@@ -308,26 +321,27 @@ class PersonHandler:
                     f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
                         cls, track, bbox[0], bbox[1], bbox[2], bbox[3], bbox[2] - bbox[0], bbox[3] - bbox[1]))
 
-                if cls in [2, 5, 7]:
-                    if track.hits >= 6:
-                        total += 1
-                else:
-                    if track.hits >= 4:
-                        total += 1
+                if track.hits >= 6:
+                    total += 1
 
             total_objects[cls] = total
-        else:
-            # Process people
+
+        for cls in self.tracker:
+            # Process people and Vehicle
             total = 0
 
-            for track in self.tracker.tracks:
+            for track in self.tracker[cls].tracks:
                 bbox = track.init_bbox.astype(int)
 
                 if self.track_dir is not None:
                     f.write('{},{}, xmin={}, ymin={}, xmax={}, ymax={}, width={}, height={}\n'.format(
-                        0, track, bbox[0], bbox[1], bbox[2] + bbox[0], bbox[3] + bbox[1], bbox[2], bbox[3]))
+                        cls, track, bbox[0], bbox[1], bbox[2] + bbox[0], bbox[3] + bbox[1], bbox[2], bbox[3]))
 
-                if track.hits >= 5:
-                    total += 1
+                if cls == 0:
+                    if track.hits >= 5:
+                        total += 1
+                else:
+                    if track.hits >= 6:
+                        total += 1
 
-            total_objects[0] = total
+            total_objects[cls] = total
